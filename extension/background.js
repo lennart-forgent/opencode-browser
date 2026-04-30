@@ -599,7 +599,7 @@ async function toolActivateTab({ tabId }) {
 
   // Small delay to let the OS compositor draw the window if it wasn't already active
   if (!tab.active || (focusedWin && focusedWin.focused && focusedWin.id !== tab.windowId)) {
-    await new Promise((resolve) => setTimeout(resolve, 300))
+    await new Promise((resolve) => setTimeout(resolve, 200))
   }
   
   return { tabId: tab.id, content: `Activated tab ${tab.id}` }

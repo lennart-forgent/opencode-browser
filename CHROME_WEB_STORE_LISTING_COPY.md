@@ -17,7 +17,7 @@ OpenCode Browser Automation connects OpenCode to your real browser tabs so you c
 What it does:
 
 - Open, close, and navigate tabs
-- Click, type, select, and scroll on pages
+- Click, type, and scroll on pages
 - Capture screenshots
 - Read download metadata and manage file-input uploads
 - Optional diagnostics for console logs and page errors

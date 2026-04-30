@@ -299,7 +299,6 @@ async function executeTool(toolName, args) {
     navigate: toolNavigate,
     click: toolClick,
     type: toolType,
-    select: toolSelect,
     screenshot: toolScreenshot,
     scroll: toolScroll,
     wait: toolWait,
@@ -783,66 +782,6 @@ async function pageOps(command, args) {
     return { ok: false, error: `Element is not typable: ${match.selectorUsed} (${tag.toLowerCase()})` }
   }
 
-  if (command === "select") {
-    const value = typeof options.value === "string" ? options.value : null
-    const label = typeof options.label === "string" ? options.label : null
-    const optionIndex = Number.isFinite(options.optionIndex) ? options.optionIndex : null
-    const match = await resolveMatches(selectors, index, timeoutMs, pollMs)
-    if (!match.chosen) {
-      return { ok: false, error: `Element not found for selectors: ${selectors.join(", ")}` }
-    }
-
-    const tag = match.chosen.tagName
-    if (tag !== "SELECT") {
-      return { ok: false, error: `Element is not a select: ${match.selectorUsed} (${tag.toLowerCase()})` }
-    }
-
-    if (value === null && label === null && optionIndex === null) {
-      return { ok: false, error: "value, label, or optionIndex is required" }
-    }
-
-    const selectEl = match.chosen
-    const optionList = Array.from(selectEl.options || [])
-    let option = null
-
-    if (value !== null) {
-      option = optionList.find((opt) => opt.value === value)
-    }
-
-    if (!option && label !== null) {
-      const target = label.trim()
-      option = optionList.find((opt) => (opt.label || opt.textContent || "").trim() === target)
-    }
-
-    if (!option && optionIndex !== null) {
-      option = optionList[optionIndex]
-    }
-
-    if (!option) {
-      return { ok: false, error: "Option not found" }
-    }
-
-    try {
-      selectEl.scrollIntoView({ block: "center", inline: "center" })
-    } catch {}
-
-    try {
-      selectEl.focus()
-    } catch {}
-
-    setSelectValue(selectEl, option.value)
-    option.selected = true
-    selectEl.dispatchEvent(new Event("input", { bubbles: true }))
-    selectEl.dispatchEvent(new Event("change", { bubbles: true }))
-
-    return {
-      ok: true,
-      selectorUsed: match.selectorUsed,
-      value: selectEl.value,
-      label: (option.label || option.textContent || "").trim(),
-    }
-  }
-
   if (command === "set_file_input") {
     const rawFiles = Array.isArray(options.files) ? options.files : options.files ? [options.files] : []
     if (!rawFiles.length) return { ok: false, error: "files is required" }
@@ -1038,22 +977,6 @@ async function toolType({ selector, text, tabId, clear = false, index = 0, timeo
   if (!result?.ok) throw new Error(result?.error || "Type failed")
   const used = result.selectorUsed || selector
   return { tabId: tab.id, content: `Typed "${text}" into ${used}` }
-}
-
-async function toolSelect({ selector, value, label, optionIndex, tabId, index = 0, timeoutMs, pollMs }) {
-  if (!selector) throw new Error("Selector is required")
-  if (value === undefined && label === undefined && optionIndex === undefined) {
-    throw new Error("value, label, or optionIndex is required")
-  }
-  const tab = await getTabById(tabId)
-
-  const result = await runInPage(tab.id, "select", { selector, value, label, optionIndex, index, timeoutMs, pollMs })
-  if (!result?.ok) throw new Error(result?.error || "Select failed")
-  const used = result.selectorUsed || selector
-  const valueText = result.value ? String(result.value) : ""
-  const labelText = result.label ? String(result.label) : ""
-  const summary = labelText && valueText && labelText !== valueText ? `${labelText} (${valueText})` : labelText || valueText
-  return { tabId: tab.id, content: `Selected ${summary || "option"} in ${used}` }
 }
 
 async function toolScreenshot({ tabId }) {

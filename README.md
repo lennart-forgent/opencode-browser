@@ -131,7 +131,6 @@ Core primitives:
 - `browser_navigate`
 - `browser_click` (uses x/y coordinates)
 - `browser_type`
-- `browser_select` (optional `timeoutMs`/`pollMs`)
 - `browser_scroll` (optional `timeoutMs`/`pollMs`)
 - `browser_wait`
 

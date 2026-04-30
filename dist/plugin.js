@@ -12676,24 +12676,6 @@ var plugin = async (ctx) => {
           return toolResultText(data, `Typed "${text}" into ${selector}`);
         }
       }),
-      browser_select: tool({
-        description: "Select an option in a native select element",
-        args: {
-          selector: schema.string(),
-          value: schema.string().optional(),
-          label: schema.string().optional(),
-          optionIndex: schema.number().optional(),
-          index: schema.number().optional(),
-          tabId: schema.number().optional(),
-          timeoutMs: schema.number().optional(),
-          pollMs: schema.number().optional()
-        },
-        async execute({ selector, value, label, optionIndex, index, tabId, timeoutMs, pollMs }, ctx2) {
-          const data = await toolRequest("select", { selector, value, label, optionIndex, index, tabId, timeoutMs, pollMs });
-          const summary = value ?? label ?? (optionIndex != null ? String(optionIndex) : "option");
-          return toolResultText(data, `Selected ${summary} in ${selector}`);
-        }
-      }),
       browser_screenshot: tool({
         description: "Take a screenshot of the current page. Returns base64 image data URL.",
         args: {

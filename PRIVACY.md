@@ -9,7 +9,7 @@ OpenCode Browser is a companion extension for the OpenCode plugin. It automates 
 Depending on granted permissions and the sites you allow, the extension can access:
 
 - Website content (DOM text, element attributes, links, forms)
-- User activity related to requested automation steps (clicks, typing, selection)
+- User activity related to requested automation steps (clicks, typing)
 - Screenshots requested by the user
 - Download metadata for files initiated by automation
 - Optional diagnostics data (console messages and page errors) when debugger permission is granted

@@ -36,12 +36,6 @@ metadata:
 
 This path is useful for reproducing selector/scroll issues quickly before running a full OpenCode session.
 
-## Selecting options
-
-- Use `browser_select` for native `<select>` elements
-- Prefer `value` or `label`; use `optionIndex` when needed
-- Example: `browser_select({ selector: "select", value: "plugin" })`
-
 ## Inspecting Page Content
 
 - Use `browser_screenshot` to analyze exactly what the user sees

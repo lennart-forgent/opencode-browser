@@ -136,7 +136,7 @@ Core primitives:
 - `browser_wait`
 
 Downloads:
-- `browser_download`
+- `browser_list_downloads`
 
 Uploads:
 - `browser_set_file_input` (extension backend supports small files; use agent backend for larger uploads)

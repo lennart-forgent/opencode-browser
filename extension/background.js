@@ -98,6 +98,16 @@ async function ensureDebuggerAvailable() {
   return { ok: true }
 }
 
+async function ensureDownloadsAvailable() {
+  if (!chrome.downloads) {
+    throw new Error(`Downloads API unavailable in this build. ${PERMISSION_HINT}`)
+  }
+
+  const granted = await hasDownloadsPermission()
+  if (!granted) {
+    throw new Error(`Downloads permission not granted. ${PERMISSION_HINT}`)
+  }
+}
 
 async function ensureDebuggerAttached(tabId) {
   const availability = await ensureDebuggerAvailable()
@@ -293,6 +303,7 @@ async function executeTool(toolName, args) {
     screenshot: toolScreenshot,
     scroll: toolScroll,
     wait: toolWait,
+    list_downloads: toolListDownloads,
     set_file_input: toolSetFileInput,
     highlight: toolHighlight,
     console: toolConsole,
@@ -1077,6 +1088,30 @@ function clampNumber(value, min, max, fallback) {
   const n = Number(value)
   if (!Number.isFinite(n)) return fallback
   return Math.min(Math.max(n, min), max)
+}
+
+async function toolListDownloads({ limit = 20, state } = {}) {
+  await ensureDownloadsAvailable()
+
+  const limitValue = clampNumber(limit, 1, 200, 20)
+  const query = { orderBy: ["-startTime"], limit: limitValue }
+  if (typeof state === "string" && state.trim()) query.state = state.trim()
+
+  const downloads = await chrome.downloads.search(query)
+  const out = downloads.map((d) => ({
+    id: d.id,
+    url: d.url,
+    filename: d.filename,
+    state: d.state,
+    bytesReceived: d.bytesReceived,
+    totalBytes: d.totalBytes,
+    startTime: d.startTime,
+    endTime: d.endTime,
+    error: d.error,
+    mime: d.mime,
+  }))
+
+  return { content: JSON.stringify({ downloads: out }, null, 2) }
 }
 
 async function toolSetFileInput({ selector, tabId, index = 0, timeoutMs, pollMs, files }) {

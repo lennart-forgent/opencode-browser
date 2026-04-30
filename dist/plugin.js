@@ -12727,6 +12727,17 @@ var plugin = async (ctx) => {
           return toolResultText(data, "Waited");
         }
       }),
+      browser_list_downloads: tool({
+        description: "List recent downloads (Chrome backend).",
+        args: {
+          limit: schema.number().optional(),
+          state: schema.string().optional()
+        },
+        async execute({ limit, state }, ctx2) {
+          const data = await toolRequest("list_downloads", { limit, state });
+          return toolResultText(data, "[]");
+        }
+      }),
       browser_set_file_input: tool({
         description: "Set a file input element's selected file using a local file path.",
         args: {

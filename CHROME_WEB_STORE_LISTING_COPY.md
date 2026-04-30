@@ -19,7 +19,7 @@ What it does:
 - Open, close, and navigate tabs
 - Click, type, select, and scroll on pages
 - Capture screenshots
-- Manage file-input uploads
+- Read download metadata and manage file-input uploads
 - Optional diagnostics for console logs and page errors
 
 Architecture:

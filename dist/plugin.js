@@ -12335,7 +12335,7 @@ function tool(input) {
 tool.schema = exports_external;
 // src/plugin.ts
 import net from "net";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from "fs";
 import { homedir, userInfo } from "os";
 import { basename, dirname, isAbsolute, join, resolve } from "path";
 import { spawn } from "child_process";
@@ -12675,7 +12675,7 @@ var plugin = async (ctx) => {
         }
       }),
       browser_screenshot: tool({
-        description: "Take a screenshot of the current page. Returns base64 image data URL.",
+        description: "Take a screenshot of the current page. Saves to a local file and returns the path.",
         args: {
           tabId: schema.number().optional()
         },
@@ -12710,8 +12710,13 @@ var plugin = async (ctx) => {
                       png.on("end", () => {
                         try {
                           const buf = Buffer.concat(chunks);
-                          const base643 = buf.toString("base64");
-                          resolve2(`data:image/png;base64,${base643}`);
+                          const screenshotDir = join(ctx2?.directory || process.cwd(), ".opencode");
+                          if (!existsSync(screenshotDir)) {
+                            mkdirSync(screenshotDir, { recursive: true });
+                          }
+                          const filepath = join(screenshotDir, `screenshot-${Date.now()}.png`);
+                          writeFileSync(filepath, buf);
+                          resolve2(`Screenshot saved to ${filepath}. Use the Read tool to view this file.`);
                         } finally {
                           X.close();
                         }

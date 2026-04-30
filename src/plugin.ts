@@ -1,7 +1,7 @@
 import type { Plugin } from "@opencode-ai/plugin";
 import { tool } from "@opencode-ai/plugin";
 import net from "net";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, unlinkSync } from "fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, statSync, unlinkSync } from "fs";
 import { homedir, userInfo } from "os";
 import { basename, dirname, isAbsolute, join, resolve } from "path";
 import { spawn, execSync } from "child_process";
@@ -393,7 +393,7 @@ const plugin: Plugin = async (ctx) => {
       }),
 
       browser_screenshot: tool({
-        description: "Take a screenshot of the current page. Returns base64 image data URL.",
+        description: "Take a screenshot of the current page. Saves to a local file and returns the path.",
         args: {
           tabId: schema.number().optional(),
         },
@@ -430,8 +430,13 @@ const plugin: Plugin = async (ctx) => {
                       png.on('end', () => {
                         try {
                           const buf = Buffer.concat(chunks);
-                          const base64 = buf.toString("base64");
-                          resolve(`data:image/png;base64,${base64}`);
+                          const screenshotDir = join(ctx?.directory || process.cwd(), ".opencode");
+                          if (!existsSync(screenshotDir)) {
+                            mkdirSync(screenshotDir, { recursive: true });
+                          }
+                          const filepath = join(screenshotDir, `screenshot-${Date.now()}.png`);
+                          writeFileSync(filepath, buf);
+                          resolve(`Screenshot saved to ${filepath}. Use the Read tool to view this file.`);
                         } finally {
                           X.close();
                         }

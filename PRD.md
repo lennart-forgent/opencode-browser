@@ -1,7 +1,7 @@
 # PRD — OpenCode Browser Dual Backend (Native + Agent)
 
 ## Summary
-OpenCode Browser should feel like a single browser automation capability that can run against two backends: the **native OpenCode Browser extension** (real Chrome profile) and **agent-browser** (headless Playwright). The default experience must work with agent-browser out of the box, while preserving the native-extension path for authenticated, profile-driven workflows. Users should think: “I pick which browser to run on, and the task runs there.”
+OpenCode Browser should feel like a single browser automation capability that can run against the **native OpenCode Browser extension** (real Chrome profile).
 
 ## Problem
 - The plugin has two backends with different setup paths and capabilities, but users lack a clear, unified mental model for choosing between them.
@@ -9,7 +9,6 @@ OpenCode Browser should feel like a single browser automation capability that ca
 - The system lacks a consistent way to signal which backend is active, how to switch, and what capabilities are available.
 
 ## Goals
-1. Make agent-browser the default backend when available, without requiring env flags.
 2. Preserve the native extension backend for workflows that depend on a real browser profile.
 3. Provide a clean mental model: **“Pick the browser target, run tasks there.”**
 4. Offer clear UX affordances (CLI + UI + prompt-level) to pick or override the browser.
@@ -41,10 +40,6 @@ OpenCode Browser should feel like a single browser automation capability that ca
 
 ## Functional Requirements
 ### Default Selection
-- Default backend mode is **auto** with **agent-browser priority**:
-  1. If agent-browser is installed and reachable, use agent-browser.
-  2. Else, if the native extension broker is reachable, use native.
-  3. Else, surface a “no browser available” error with setup instructions.
 - Explicit user choice always overrides auto-selection.
 
 ### Backend Selection Surface Area
@@ -54,30 +49,18 @@ OpenCode Browser should feel like a single browser automation capability that ca
 
 ### Capability Signaling
 - `browser_status` returns:
-  - `backend`: `agent-browser` or `extension`
+  - `backend`: `extension`
   - `capabilities`: `profile_access`, `headless`, `tab_claims`, `file_uploads`, `downloads`
   - `active_session`: backend session identifier
 - UI should expose the active backend and show a short rationale if auto-selected.
 
 ### Graceful Degradation
 - If a task requests `native` but extension is unavailable, return a structured error plus setup steps.
-- If a task requests `agent` but agent-browser is missing, offer installation instructions and fallback to native if user permits.
-
-### Compatibility Requirements
-- Existing env vars (`OPENCODE_BROWSER_BACKEND`, agent-browser overrides) continue to work and override auto mode.
-- No changes required to agent-browser CLI usage.
 
 ## UX/Flows
 ### Onboarding / First Use
 1. User installs OpenCode Browser plugin.
 2. OpenCode checks backend availability.
-3. Default picks agent-browser if installed, else native extension.
-4. UI or CLI surfaces the choice: “Using Agent Browser (headless). Switch → Native Browser.”
-
-### Switching Backends
-- UI: a “Browser Target” selector in Settings.
-- CLI: `opencode run --browser=agent|native`.
-- Prompt: `@browser agent` / `@browser native`.
 
 ### Error UX
 - Structured error with:
@@ -87,7 +70,6 @@ OpenCode Browser should feel like a single browser automation capability that ca
 
 ## Technical Considerations (Design Only)
 - Introduce a **backend router** that encapsulates selection logic and capability reporting.
-- Maintain feature matrix for parity gaps (e.g., tab claims not supported on agent-browser).
 - Auto-detection uses lightweight health checks on both backends.
 
 ## Capability Matrix (Target Behavior)
@@ -116,8 +98,4 @@ OpenCode Browser should feel like a single browser automation capability that ca
 4. Collect telemetry + adjust defaults if reliability issues appear.
 
 ## Open Questions
-- Should agent-browser be bundled or remain optional dependency?
-- What is the best UX surface in OpenWork for backend selection?
-- Do we allow per-tool overrides or only per-session?
-- How should “tab claims” limitations be surfaced to users?
-- What is the policy for auto-fallback (silent vs explicit)?
+

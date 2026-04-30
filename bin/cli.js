@@ -634,10 +634,6 @@ ${color("cyan", "Browser automation plugin (native messaging + per-tab ownership
     await uninstall();
   } else if (command === "status") {
     await status();
-  } else if (command === "agent-install") {
-    await agentInstall();
-  } else if (command === "agent-gateway") {
-    await agentGateway();
   } else {
     log(`
 ${color("bright", "Usage:")}
@@ -648,8 +644,6 @@ ${color("bright", "Usage:")}
   npx @different-ai/opencode-browser tools
   npx @different-ai/opencode-browser tool <toolName> [argsJson]
   npx @different-ai/opencode-browser self-test
-  npx @different-ai/opencode-browser agent-install
-  npx @different-ai/opencode-browser agent-gateway
 
 ${color("bright", "Options:")}
   --extension-id <id> (or OPENCODE_BROWSER_EXTENSION_ID)
@@ -659,11 +653,6 @@ ${color("bright", "Quick Start:")}
   1. Run: npx @different-ai/opencode-browser install
   2. Restart OpenCode
   3. Use: browser_navigate / browser_click / browser_snapshot
-
-${color("bright", "Agent Mode:")}
-  1. Run: npx @different-ai/opencode-browser agent-install
-  2. Set OPENCODE_BROWSER_BACKEND=agent
-  3. Optionally run: npx @different-ai/opencode-browser agent-gateway
 `);
   }
 
@@ -1129,31 +1118,6 @@ async function status() {
   } else {
     warn(`Broker status: ${brokerStatus.error || "unavailable"}`);
   }
-}
-
-async function agentInstall() {
-  header("Agent Browser Install");
-
-  const extraArgs = process.argv.slice(3).join(" ");
-  const command = `npx agent-browser install ${extraArgs}`.trim();
-  try {
-    execSync(command, { stdio: "inherit" });
-    success("agent-browser install completed.");
-  } catch (err) {
-    error(`agent-browser install failed: ${err?.message || err}`);
-  }
-}
-
-async function agentGateway() {
-  header("Agent Browser Gateway");
-
-  const gatewayPath = join(PACKAGE_ROOT, "bin", "agent-gateway.cjs");
-  success(`Starting gateway: ${gatewayPath}`);
-
-  await new Promise((resolve) => {
-    const child = spawn(process.execPath, [gatewayPath], { stdio: "inherit" });
-    child.on("exit", resolve);
-  });
 }
 
 async function uninstall() {

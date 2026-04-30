@@ -1,11 +1,15 @@
 var __defProp = Object.defineProperty;
+var __returnValue = (v) => v;
+function __exportSetter(name, newValue) {
+  this[name] = __returnValue.bind(null, newValue);
+}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: (newValue) => all[name] = () => newValue
+      set: __exportSetter.bind(all, name)
     });
 };
 
@@ -12330,22 +12334,84 @@ function tool(input) {
 }
 tool.schema = exports_external;
 // src/plugin.ts
-import net2 from "net";
-
-// src/agent-backend.ts
 import net from "net";
-import { mkdirSync, readFileSync } from "fs";
-import { homedir, tmpdir } from "os";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "fs";
+import { homedir, userInfo } from "os";
 import { basename, dirname, isAbsolute, join, resolve } from "path";
 import { spawn } from "child_process";
-import { createRequire } from "module";
-var agentRequire = createRequire(import.meta.url);
-var REQUEST_TIMEOUT_MS = 60000;
-var DEFAULT_PAGE_TEXT_LIMIT = 20000;
-var DEFAULT_LIST_LIMIT = 50;
-var DEFAULT_POLL_MS = 200;
+import { fileURLToPath } from "url";
+var __filename2 = fileURLToPath(import.meta.url);
+var __dirname2 = dirname(__filename2);
+var PACKAGE_JSON_PATH = join(__dirname2, "..", "package.json");
+var cachedVersion = null;
+function getPackageVersion() {
+  if (cachedVersion)
+    return cachedVersion;
+  try {
+    const pkg = JSON.parse(readFileSync(PACKAGE_JSON_PATH, "utf8"));
+    if (typeof pkg?.version === "string") {
+      cachedVersion = pkg.version;
+      return cachedVersion;
+    }
+  } catch {}
+  cachedVersion = "unknown";
+  return cachedVersion;
+}
+var { schema } = tool;
 var BASE_DIR = join(homedir(), ".opencode-browser");
-var DEFAULT_DOWNLOADS_DIR = join(BASE_DIR, "downloads");
+var SOCKET_PATH = getBrokerSocketPath();
+var LOG_PATH = join(BASE_DIR, "plugin.log");
+function getSafePipeName() {
+  try {
+    const username = userInfo().username || "user";
+    return `opencode-browser-${username}`.replace(/[^a-zA-Z0-9._-]/g, "_");
+  } catch {
+    return "opencode-browser";
+  }
+}
+function getBrokerSocketPath() {
+  const override = process.env.OPENCODE_BROWSER_BROKER_SOCKET;
+  if (override)
+    return override;
+  if (process.platform === "win32")
+    return `\\\\.\\pipe\\${getSafePipeName()}`;
+  return join(BASE_DIR, "broker.sock");
+}
+mkdirSync(BASE_DIR, { recursive: true });
+function logDebug(message) {
+  try {
+    appendFileSync(LOG_PATH, `[${new Date().toISOString()}] ${message}
+`, "utf8");
+  } catch {}
+}
+logDebug(`plugin loaded v${getPackageVersion()} pid=${process.pid} socket=${SOCKET_PATH}`);
+var DEFAULT_MAX_UPLOAD_BYTES = 512 * 1024;
+var MAX_UPLOAD_BYTES = (() => {
+  const raw = process.env.OPENCODE_BROWSER_MAX_UPLOAD_BYTES;
+  const value = raw ? Number(raw) : NaN;
+  if (Number.isFinite(value) && value > 0)
+    return value;
+  return DEFAULT_MAX_UPLOAD_BYTES;
+})();
+function resolveUploadPath(filePath) {
+  const trimmed = typeof filePath === "string" ? filePath.trim() : "";
+  if (!trimmed)
+    throw new Error("filePath is required");
+  return isAbsolute(trimmed) ? trimmed : resolve(process.cwd(), trimmed);
+}
+function buildFileUploadPayload(filePath, fileName, mimeType) {
+  const absPath = resolveUploadPath(filePath);
+  const stats = statSync(absPath);
+  if (!stats.isFile())
+    throw new Error(`Not a file: ${absPath}`);
+  if (stats.size > MAX_UPLOAD_BYTES) {
+    throw new Error(`File too large (${stats.size} bytes). Max is ${MAX_UPLOAD_BYTES} bytes (OPENCODE_BROWSER_MAX_UPLOAD_BYTES).`);
+  }
+  const base643 = readFileSync(absPath).toString("base64");
+  const name = typeof fileName === "string" && fileName.trim() ? fileName.trim() : basename(absPath);
+  const mt = typeof mimeType === "string" && mimeType.trim() ? mimeType.trim() : undefined;
+  return { name, mimeType: mt, base64: base643 };
+}
 function createJsonLineParser(onMessage) {
   let buffer = "";
   return (chunk) => {
@@ -12369,858 +12435,19 @@ function writeJsonLine(socket, msg) {
   socket.write(JSON.stringify(msg) + `
 `);
 }
-async function sleep(ms) {
-  return await new Promise((resolve2) => setTimeout(resolve2, ms));
-}
-function parseEnvNumber(value) {
-  if (!value)
-    return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-function getAgentSession(sessionId) {
-  const override = process.env.OPENCODE_BROWSER_AGENT_SESSION?.trim();
-  if (override)
-    return override;
-  return `opencode-${sessionId}`;
-}
-function getAgentPortForSession(session) {
-  let hash2 = 0;
-  for (let i = 0;i < session.length; i++) {
-    hash2 = (hash2 << 5) - hash2 + session.charCodeAt(i);
-    hash2 |= 0;
-  }
-  return 49152 + Math.abs(hash2) % 16383;
-}
-function getAgentConnectionInfo(session) {
-  const socketOverride = process.env.OPENCODE_BROWSER_AGENT_SOCKET?.trim();
-  if (socketOverride) {
-    return { type: "unix", path: socketOverride };
-  }
-  const hostOverride = process.env.OPENCODE_BROWSER_AGENT_HOST?.trim();
-  const portOverride = parseEnvNumber(process.env.OPENCODE_BROWSER_AGENT_PORT);
-  const transportOverride = process.env.OPENCODE_BROWSER_AGENT_TRANSPORT?.toLowerCase();
-  const forceTcp = transportOverride === "tcp" || process.env.OPENCODE_BROWSER_AGENT_TCP === "1";
-  if (hostOverride || portOverride !== null || forceTcp || process.platform === "win32") {
-    const host = hostOverride || "127.0.0.1";
-    const port = portOverride ?? getAgentPortForSession(session);
-    return { type: "tcp", host, port };
-  }
-  return { type: "unix", path: join(tmpdir(), `agent-browser-${session}.sock`) };
-}
-function isLocalHost(host) {
-  return host === "127.0.0.1" || host === "localhost" || host === "::1";
-}
-function resolveAgentDaemonPath() {
-  const override = process.env.OPENCODE_BROWSER_AGENT_DAEMON?.trim();
-  if (override)
-    return override;
-  try {
-    return agentRequire.resolve("agent-browser/dist/daemon.js");
-  } catch {
-    return null;
-  }
-}
-function resolveAgentNodePath() {
-  const override = process.env.OPENCODE_BROWSER_AGENT_NODE?.trim();
-  return override || process.execPath;
-}
-function getAgentPackageVersion() {
-  try {
-    const pkgPath = agentRequire.resolve("agent-browser/package.json");
-    const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
-    return typeof pkg?.version === "string" ? pkg.version : null;
-  } catch {
-    return null;
-  }
-}
-function shouldAutoStartAgent(connection) {
-  const autoStart = process.env.OPENCODE_BROWSER_AGENT_AUTOSTART?.toLowerCase();
-  if (autoStart && ["0", "false", "no"].includes(autoStart))
-    return false;
-  if (connection.type === "unix")
-    return true;
-  return connection.type === "tcp" && process.platform === "win32" && isLocalHost(connection.host);
-}
-async function maybeStartAgentDaemon(connection, session) {
-  if (!shouldAutoStartAgent(connection))
-    return;
-  const daemonPath = resolveAgentDaemonPath();
-  if (!daemonPath) {
-    throw new Error("agent-browser dependency not found. Install agent-browser or set OPENCODE_BROWSER_AGENT_DAEMON.");
-  }
-  try {
-    const child = spawn(resolveAgentNodePath(), [daemonPath], {
-      detached: true,
-      stdio: "ignore",
-      env: {
-        ...process.env,
-        AGENT_BROWSER_SESSION: session,
-        AGENT_BROWSER_DAEMON: "1"
-      }
-    });
-    child.unref();
-  } catch {}
-}
-function buildEvalScript(body) {
-  return `(() => { ${body} })()`;
-}
-function buildAgentTypeScript(selector, indexValue, text, clear) {
-  const payload = { selector, index: indexValue, text, clear };
-  return buildEvalScript(`
-    const payload = ${JSON.stringify(payload)};
-    let matches = [];
-    try {
-      matches = Array.from(document.querySelectorAll(payload.selector));
-    } catch {
-      return { ok: false, error: "Invalid selector" };
-    }
-    const element = matches[payload.index];
-    if (!element) return { ok: false, error: "Element not found" };
-    const tag = element.tagName ? element.tagName.toUpperCase() : "";
-    if (tag === "INPUT" || tag === "TEXTAREA") {
-      if (payload.clear) element.value = "";
-      element.value = (element.value || "") + payload.text;
-      element.dispatchEvent(new Event("input", { bubbles: true }));
-      element.dispatchEvent(new Event("change", { bubbles: true }));
-      return { ok: true };
-    }
-    if (element.isContentEditable) {
-      if (payload.clear) element.textContent = "";
-      element.textContent = (element.textContent || "") + payload.text;
-      element.dispatchEvent(new Event("input", { bubbles: true }));
-      return { ok: true };
-    }
-    return { ok: false, error: "Element is not typable" };
-  `);
-}
-function buildAgentSelectScript(selector, indexValue, value, label, optionIndex) {
-  const payload = {
-    selector,
-    index: indexValue,
-    value: value ?? null,
-    label: label ?? null,
-    optionIndex: Number.isFinite(optionIndex) ? optionIndex : null
-  };
-  return buildEvalScript(`
-    const payload = ${JSON.stringify(payload)};
-    let matches = [];
-    try {
-      matches = Array.from(document.querySelectorAll(payload.selector));
-    } catch {
-      return { ok: false, error: "Invalid selector" };
-    }
-    const element = matches[payload.index];
-    if (!element) return { ok: false, error: "Element not found" };
-    if (!element.tagName || element.tagName.toUpperCase() !== "SELECT") {
-      return { ok: false, error: "Element is not a select" };
-    }
-    const options = Array.from(element.options || []);
-    let chosen = null;
-    if (payload.value !== null) {
-      chosen = options.find((option) => option.value === payload.value) || null;
-    }
-    if (!chosen && payload.label !== null) {
-      const target = payload.label.trim();
-      chosen = options.find((option) => (option.label || option.textContent || "").trim() === target) || null;
-    }
-    if (!chosen && payload.optionIndex !== null) {
-      chosen = options[payload.optionIndex] || null;
-    }
-    if (!chosen) return { ok: false, error: "Option not found" };
-    element.value = chosen.value;
-    chosen.selected = true;
-    element.dispatchEvent(new Event("input", { bubbles: true }));
-    element.dispatchEvent(new Event("change", { bubbles: true }));
-    return {
-      ok: true,
-      value: element.value,
-      label: (chosen.label || chosen.textContent || "").trim(),
-    };
-  `);
-}
-function buildAgentPageTextScript(limit, pattern, flags) {
-  const payload = { limit, pattern, flags };
-  return buildEvalScript(`
-    const payload = ${JSON.stringify(payload)};
-    const safeString = (value) => (typeof value === "string" ? value : "");
-    const bodyText = safeString(document.body ? document.body.innerText : "");
-    const inputText = Array.from(document.querySelectorAll("input, textarea, [contenteditable='true']"))
-      .map((element) => {
-        if (element.tagName === "INPUT" || element.tagName === "TEXTAREA") {
-          return safeString(element.value);
-        }
-        return safeString(element.textContent);
-      })
-      .filter(Boolean)
-      .join("
-");
-    const combined = [bodyText, inputText].filter(Boolean).join("
-
-");
-    const maxSize = Number.isFinite(payload.limit) ? payload.limit : ${DEFAULT_PAGE_TEXT_LIMIT};
-    const text = combined.slice(0, Math.max(0, maxSize));
-    let matches = [];
-    if (payload.pattern) {
-      try {
-        const re = new RegExp(payload.pattern, payload.flags || "i");
-        let match;
-        while ((match = re.exec(text)) && matches.length < 50) {
-          matches.push(match[0]);
-          if (!re.global) break;
-        }
-      } catch {
-        matches = [];
-      }
-    }
-    return {
-      url: location.href,
-      title: document.title,
-      text,
-      matches,
-    };
-  `);
-}
-function buildAgentListScript(selector, limit) {
-  const payload = { selector, limit };
-  return buildEvalScript(`
-    const payload = ${JSON.stringify(payload)};
-    let nodes = [];
-    try {
-      nodes = Array.from(document.querySelectorAll(payload.selector));
-    } catch {
-      return { ok: false, error: "Invalid selector" };
-    }
-    const maxItems = Math.min(Math.max(1, payload.limit || ${DEFAULT_LIST_LIMIT}), 200);
-    const items = nodes.slice(0, maxItems).map((element) => ({
-      text: (element.innerText || element.textContent || "").trim().slice(0, 200),
-      tag: (element.tagName || "").toLowerCase(),
-      ariaLabel: element.getAttribute ? element.getAttribute("aria-label") : null,
-    }));
-    return { ok: true, value: { items, count: nodes.length } };
-  `);
-}
-function buildAgentNthValueScript(selector, indexValue) {
-  const payload = { selector, index: indexValue };
-  return buildEvalScript(`
-    const payload = ${JSON.stringify(payload)};
-    let nodes = [];
-    try {
-      nodes = Array.from(document.querySelectorAll(payload.selector));
-    } catch {
-      return { ok: false, error: "Invalid selector" };
-    }
-    const element = nodes[payload.index];
-    if (!element) return { ok: false, error: "Element not found" };
-    const value = element.value !== undefined ? element.value : "";
-    return { ok: true, value: typeof value === "string" ? value : String(value ?? "") };
-  `);
-}
-function buildAgentNthAttributeScript(selector, indexValue, attribute) {
-  const payload = { selector, index: indexValue, attribute };
-  return buildEvalScript(`
-    const payload = ${JSON.stringify(payload)};
-    let nodes = [];
-    try {
-      nodes = Array.from(document.querySelectorAll(payload.selector));
-    } catch {
-      return { ok: false, error: "Invalid selector" };
-    }
-    const element = nodes[payload.index];
-    if (!element) return { ok: false, error: "Element not found" };
-    const value = element.getAttribute ? element.getAttribute(payload.attribute) : null;
-    return { ok: true, value };
-  `);
-}
-function buildAgentNthPropertyScript(selector, indexValue, property) {
-  const payload = { selector, index: indexValue, property };
-  return buildEvalScript(`
-    const payload = ${JSON.stringify(payload)};
-    let nodes = [];
-    try {
-      nodes = Array.from(document.querySelectorAll(payload.selector));
-    } catch {
-      return { ok: false, error: "Invalid selector" };
-    }
-    const element = nodes[payload.index];
-    if (!element) return { ok: false, error: "Element not found" };
-    return { ok: true, value: element[payload.property] };
-  `);
-}
-function buildAgentOuterHtmlScript(selector, indexValue) {
-  const payload = { selector, index: indexValue };
-  return buildEvalScript(`
-    const payload = ${JSON.stringify(payload)};
-    let nodes = [];
-    try {
-      nodes = Array.from(document.querySelectorAll(payload.selector));
-    } catch {
-      return { ok: false, error: "Invalid selector" };
-    }
-    const element = nodes[payload.index];
-    if (!element) return { ok: false, error: "Element not found" };
-    return { ok: true, value: element.outerHTML };
-  `);
-}
-function ensureEvalResult(result, fallback) {
-  if (!result || typeof result !== "object" || result.ok !== true) {
-    const message = typeof result?.error === "string" ? result.error : fallback;
-    throw new Error(message);
-  }
-  return result.value;
-}
-function createAgentBackend(sessionId) {
-  const session = getAgentSession(sessionId);
-  const connection = getAgentConnectionInfo(session);
-  const downloadsDir = (() => {
-    const raw = process.env.OPENCODE_BROWSER_AGENT_DOWNLOADS_DIR?.trim();
-    if (!raw)
-      return DEFAULT_DOWNLOADS_DIR;
-    return isAbsolute(raw) ? raw : resolve(process.cwd(), raw);
-  })();
-  mkdirSync(downloadsDir, { recursive: true });
-  const downloads = [];
-  function resolveDownloadPath(filename, urlValue) {
-    let name = typeof filename === "string" ? filename.trim() : "";
-    if (!name && typeof urlValue === "string") {
-      try {
-        const u = new URL(urlValue);
-        name = basename(u.pathname) || "";
-      } catch {}
-    }
-    if (!name)
-      name = `download-${Date.now()}`;
-    const fullPath = isAbsolute(name) ? name : join(downloadsDir, name);
-    mkdirSync(dirname(fullPath), { recursive: true });
-    return fullPath;
-  }
-  function recordDownload(entry) {
-    downloads.unshift({ ...entry, timestamp: new Date().toISOString() });
-    if (downloads.length > 50)
-      downloads.length = 50;
-  }
-  let agentSocket = null;
-  let agentReqId = 0;
-  const agentPending = new Map;
-  async function connectToAgent() {
-    return await new Promise((resolve2, reject) => {
-      const socket = connection.type === "unix" ? net.createConnection(connection.path) : net.createConnection({ host: connection.host, port: connection.port });
-      socket.once("connect", () => resolve2(socket));
-      socket.once("error", (err) => reject(err));
-    });
-  }
-  async function ensureAgentSocket() {
-    if (agentSocket && !agentSocket.destroyed)
-      return agentSocket;
-    try {
-      agentSocket = await connectToAgent();
-    } catch {
-      await maybeStartAgentDaemon(connection, session);
-      for (let attempt = 0;attempt < 20; attempt++) {
-        await sleep(100);
-        try {
-          agentSocket = await connectToAgent();
-          break;
-        } catch {}
-      }
-    }
-    if (!agentSocket || agentSocket.destroyed) {
-      const target = connection.type === "unix" ? connection.path : `${connection.host}:${connection.port}`;
-      throw new Error(`Could not connect to agent-browser daemon at ${target}.`);
-    }
-    agentSocket.setNoDelay(true);
-    agentSocket.on("data", createJsonLineParser((msg) => {
-      if (!msg || msg.id === undefined)
-        return;
-      const messageId = typeof msg.id === "string" ? msg.id : String(msg.id);
-      const pending = agentPending.get(messageId);
-      if (!pending)
-        return;
-      agentPending.delete(messageId);
-      const res = msg;
-      if (!res.success)
-        pending.reject(new Error(res.error || "Agent browser error"));
-      else
-        pending.resolve(res.data);
-    }));
-    agentSocket.on("close", () => {
-      for (const pending of agentPending.values()) {
-        pending.reject(new Error("Agent browser connection closed"));
-      }
-      agentPending.clear();
-      agentSocket = null;
-    });
-    agentSocket.on("error", () => {
-      agentSocket = null;
-    });
-    return agentSocket;
-  }
-  async function agentRequest(action, payload) {
-    const socket = await ensureAgentSocket();
-    const id = `a${++agentReqId}`;
-    return await new Promise((resolve2, reject) => {
-      agentPending.set(id, { resolve: resolve2, reject });
-      writeJsonLine(socket, { id, action, ...payload });
-      setTimeout(() => {
-        if (!agentPending.has(id))
-          return;
-        agentPending.delete(id);
-        reject(new Error("Timed out waiting for agent-browser response"));
-      }, REQUEST_TIMEOUT_MS);
-    });
-  }
-  async function agentCommand(action, payload) {
-    return await agentRequest(action, payload);
-  }
-  async function withTab(tabId, action) {
-    if (!Number.isFinite(tabId))
-      return await action();
-    await agentCommand("tab_switch", { index: tabId });
-    return await action();
-  }
-  async function agentEvaluate(script) {
-    const data = await agentCommand("evaluate", { script });
-    return data?.result;
-  }
-  async function waitForCount(selector, minimum, timeoutMs, pollMs) {
-    const timeout = Math.max(0, timeoutMs);
-    const poll = Math.max(0, pollMs || DEFAULT_POLL_MS);
-    const start = Date.now();
-    while (true) {
-      const data = await agentCommand("count", { selector });
-      const count = Number(data?.count ?? 0);
-      if (count >= minimum)
-        return count;
-      if (!timeout || Date.now() - start >= timeout)
-        return count;
-      await sleep(poll);
-    }
-  }
-  async function agentQuery(args) {
-    const selector = typeof args.selector === "string" ? args.selector : undefined;
-    const mode = typeof args.mode === "string" && args.mode ? args.mode : "text";
-    const indexValue = Number.isFinite(args.index) ? args.index : 0;
-    const limitValue = Number.isFinite(args.limit) ? args.limit : mode === "page_text" ? DEFAULT_PAGE_TEXT_LIMIT : DEFAULT_LIST_LIMIT;
-    const timeoutValue = Number.isFinite(args.timeoutMs) ? args.timeoutMs : 0;
-    const pollValue = Number.isFinite(args.pollMs) ? args.pollMs : DEFAULT_POLL_MS;
-    const pattern = typeof args.pattern === "string" ? args.pattern : null;
-    const flags = typeof args.flags === "string" ? args.flags : "i";
-    if (mode === "page_text") {
-      if (selector && timeoutValue > 0) {
-        await waitForCount(selector, 1, timeoutValue, pollValue);
-      }
-      const pageText = await agentEvaluate(buildAgentPageTextScript(limitValue, pattern, flags));
-      return { content: JSON.stringify({ ok: true, value: pageText }, null, 2) };
-    }
-    if (!selector)
-      throw new Error("selector is required");
-    if (mode === "exists") {
-      const count2 = await waitForCount(selector, 1, timeoutValue, pollValue);
-      return {
-        content: JSON.stringify({ ok: true, value: { exists: count2 > 0, count: count2 } }, null, 2)
-      };
-    }
-    const count = await waitForCount(selector, indexValue + 1, timeoutValue, pollValue);
-    if (count <= indexValue) {
-      throw new Error(`No matches for selector: ${selector}`);
-    }
-    if (mode === "text") {
-      const data = indexValue > 0 ? await agentCommand("nth", { selector, index: indexValue, subaction: "text" }) : await agentCommand("innertext", { selector });
-      return { content: typeof data?.text === "string" ? data.text : "" };
-    }
-    if (mode === "value") {
-      if (indexValue > 0) {
-        const result = ensureEvalResult(await agentEvaluate(buildAgentNthValueScript(selector, indexValue)), "Value lookup failed");
-        return { content: typeof result === "string" ? result : JSON.stringify(result) };
-      }
-      const data = await agentCommand("inputvalue", { selector });
-      return { content: typeof data?.value === "string" ? data.value : "" };
-    }
-    if (mode === "attribute") {
-      if (!args.attribute)
-        throw new Error("attribute is required");
-      if (indexValue > 0) {
-        const result = ensureEvalResult(await agentEvaluate(buildAgentNthAttributeScript(selector, indexValue, args.attribute)), "Attribute lookup failed");
-        return { content: typeof result === "string" ? result : JSON.stringify(result) };
-      }
-      const data = await agentCommand("getattribute", { selector, attribute: args.attribute });
-      return { content: typeof data?.value === "string" ? data.value : JSON.stringify(data?.value) };
-    }
-    if (mode === "property") {
-      if (!args.property)
-        throw new Error("property is required");
-      const result = ensureEvalResult(await agentEvaluate(buildAgentNthPropertyScript(selector, indexValue, args.property)), "Property lookup failed");
-      return { content: typeof result === "string" ? result : JSON.stringify(result) };
-    }
-    if (mode === "html") {
-      const result = ensureEvalResult(await agentEvaluate(buildAgentOuterHtmlScript(selector, indexValue)), "HTML lookup failed");
-      return { content: typeof result === "string" ? result : JSON.stringify(result) };
-    }
-    if (mode === "list") {
-      const listResult = ensureEvalResult(await agentEvaluate(buildAgentListScript(selector, limitValue)), "List lookup failed");
-      return { content: JSON.stringify({ ok: true, value: listResult }, null, 2) };
-    }
-    throw new Error(`Unknown mode: ${mode}`);
-  }
-  async function requestTool(tool3, args) {
-    switch (tool3) {
-      case "get_tabs": {
-        const data = await agentCommand("tab_list", {});
-        const tabs = Array.isArray(data?.tabs) ? data.tabs : [];
-        const mapped = tabs.map((tab) => ({
-          id: tab.index,
-          url: tab.url,
-          title: tab.title,
-          active: tab.active,
-          windowId: tab.windowId ?? 0
-        }));
-        return { content: JSON.stringify(mapped, null, 2) };
-      }
-      case "list_downloads": {
-        return { content: JSON.stringify({ downloads }, null, 2) };
-      }
-      case "open_tab": {
-        const active = args.active;
-        let previousActive = null;
-        if (active === false) {
-          const list = await agentCommand("tab_list", {});
-          if (Number.isFinite(list?.active))
-            previousActive = list.active;
-        }
-        const created = await agentCommand("tab_new", {});
-        if (args.url) {
-          await agentCommand("navigate", { url: args.url });
-        }
-        if (active === false && previousActive !== null) {
-          await agentCommand("tab_switch", { index: previousActive });
-        }
-        return { content: { tabId: created.index, url: args.url, active: active !== false } };
-      }
-      case "close_tab": {
-        const payload = {};
-        if (Number.isFinite(args.tabId))
-          payload.index = args.tabId;
-        const result = await agentCommand("tab_close", payload);
-        const closed = Number.isFinite(result?.closed) ? result.closed : args.tabId;
-        return { content: { tabId: closed, remaining: result?.remaining } };
-      }
-      case "navigate": {
-        return await withTab(args.tabId, async () => {
-          if (!args.url)
-            throw new Error("URL is required");
-          await agentCommand("navigate", { url: args.url });
-          return { content: `Navigated to ${args.url}` };
-        });
-      }
-      case "download": {
-        return await withTab(args.tabId, async () => {
-          const url2 = typeof args.url === "string" ? args.url.trim() : "";
-          const selector = typeof args.selector === "string" ? args.selector.trim() : "";
-          const filename = typeof args.filename === "string" ? args.filename.trim() : "";
-          const waitValue = args.wait === undefined ? false : !!args.wait;
-          const timeoutValue = Number.isFinite(args.downloadTimeoutMs) ? args.downloadTimeoutMs : undefined;
-          if (!url2 && !selector)
-            throw new Error("url or selector is required");
-          if (url2 && selector)
-            throw new Error("Provide either url or selector, not both");
-          if (!waitValue) {
-            if (selector) {
-              await agentCommand("click", { selector });
-              return { content: JSON.stringify({ ok: true, started: true, selector }, null, 2) };
-            }
-            await agentCommand("navigate", { url: url2 });
-            return { content: JSON.stringify({ ok: true, started: true, url: url2 }, null, 2) };
-          }
-          if (selector) {
-            const path2 = resolveDownloadPath(filename || undefined);
-            const data2 = await agentCommand("download", { selector, path: path2 });
-            const entry2 = {
-              path: String(data2?.path || path2),
-              filename: typeof data2?.suggestedFilename === "string" ? data2.suggestedFilename : undefined,
-              url: url2 || undefined
-            };
-            recordDownload({ path: entry2.path, filename: entry2.filename, url: entry2.url });
-            return { content: JSON.stringify({ ok: true, ...entry2 }, null, 2) };
-          }
-          const path = resolveDownloadPath(filename || undefined, url2);
-          await agentCommand("navigate", { url: url2 });
-          const data = await agentCommand("waitfordownload", { path, timeout: timeoutValue });
-          const entry = {
-            path: String(data?.path || path),
-            filename: typeof data?.filename === "string" ? data.filename : undefined,
-            url: typeof data?.url === "string" ? data.url : url2
-          };
-          recordDownload({ path: entry.path, filename: entry.filename, url: entry.url });
-          return { content: JSON.stringify({ ok: true, ...entry }, null, 2) };
-        });
-      }
-      case "click": {
-        return await withTab(args.tabId, async () => {
-          if (!args.selector)
-            throw new Error("Selector is required");
-          const indexValue = Number.isFinite(args.index) ? args.index : 0;
-          if (indexValue) {
-            await agentCommand("nth", { selector: args.selector, index: indexValue, subaction: "click" });
-          } else {
-            await agentCommand("click", { selector: args.selector });
-          }
-          return { content: `Clicked ${args.selector}` };
-        });
-      }
-      case "type": {
-        return await withTab(args.tabId, async () => {
-          if (!args.selector)
-            throw new Error("Selector is required");
-          if (args.text === undefined)
-            throw new Error("Text is required");
-          const indexValue = Number.isFinite(args.index) ? args.index : 0;
-          if (!indexValue) {
-            await agentCommand("type", {
-              selector: args.selector,
-              text: String(args.text),
-              clear: args.clear
-            });
-          } else {
-            const result = await agentEvaluate(buildAgentTypeScript(args.selector, indexValue, String(args.text), !!args.clear));
-            if (!result?.ok) {
-              throw new Error(result?.error || "Type failed");
-            }
-          }
-          return { content: `Typed "${args.text}" into ${args.selector}` };
-        });
-      }
-      case "select": {
-        return await withTab(args.tabId, async () => {
-          if (!args.selector)
-            throw new Error("Selector is required");
-          if (args.value === undefined && args.label === undefined && args.optionIndex === undefined) {
-            throw new Error("value, label, or optionIndex is required");
-          }
-          const indexValue = Number.isFinite(args.index) ? args.index : 0;
-          let selectedValue = args.value;
-          let selectedLabel = args.label;
-          if (indexValue || args.label !== undefined || args.optionIndex !== undefined) {
-            const result = await agentEvaluate(buildAgentSelectScript(args.selector, indexValue, args.value, args.label, args.optionIndex));
-            if (!result?.ok) {
-              throw new Error(result?.error || "Select failed");
-            }
-            selectedValue = result.value;
-            selectedLabel = result.label;
-          } else if (args.value !== undefined) {
-            await agentCommand("select", { selector: args.selector, values: args.value });
-          }
-          const valueText = selectedValue ? String(selectedValue) : "";
-          const labelText = selectedLabel ? String(selectedLabel) : "";
-          const summary = labelText && valueText && labelText !== valueText ? `${labelText} (${valueText})` : labelText || valueText || "option";
-          return { content: `Selected ${summary} in ${args.selector}` };
-        });
-      }
-      case "set_file_input": {
-        return await withTab(args.tabId, async () => {
-          if (!args.selector)
-            throw new Error("Selector is required");
-          if (!args.filePath)
-            throw new Error("filePath is required");
-          const rawPath = String(args.filePath).trim();
-          if (!rawPath)
-            throw new Error("filePath is required");
-          const absPath = isAbsolute(rawPath) ? rawPath : resolve(process.cwd(), rawPath);
-          const data = await agentCommand("upload", { selector: args.selector, files: absPath });
-          return {
-            content: JSON.stringify({ ok: true, selector: args.selector, uploaded: data?.uploaded ?? [absPath] }, null, 2)
-          };
-        });
-      }
-      case "screenshot": {
-        return await withTab(args.tabId, async () => {
-          const data = await agentCommand("screenshot", { format: "png" });
-          const base643 = data?.base64 ? String(data.base64) : "";
-          if (!base643)
-            throw new Error("Screenshot failed");
-          return { content: `data:image/png;base64,${base643}` };
-        });
-      }
-      case "snapshot": {
-        return await withTab(args.tabId, async () => {
-          const data = await agentCommand("snapshot", {});
-          const payload = {
-            snapshot: data?.snapshot ?? "",
-            refs: data?.refs ?? {}
-          };
-          return { content: JSON.stringify(payload, null, 2) };
-        });
-      }
-      case "query": {
-        return await withTab(args.tabId, async () => {
-          return await agentQuery(args);
-        });
-      }
-      case "scroll": {
-        return await withTab(args.tabId, async () => {
-          const x = Number.isFinite(args.x) ? args.x : 0;
-          const y = Number.isFinite(args.y) ? args.y : 0;
-          await agentCommand("scroll", {
-            selector: args.selector,
-            x,
-            y
-          });
-          const target = args.selector ? `to ${args.selector}` : `by (${x}, ${y})`;
-          return { content: `Scrolled ${target}` };
-        });
-      }
-      case "wait": {
-        return await withTab(args.tabId, async () => {
-          const ms = Number.isFinite(args.ms) ? args.ms : 1000;
-          await agentCommand("wait", { timeout: ms });
-          return { content: `Waited ${ms}ms` };
-        });
-      }
-      default:
-        throw new Error(`Unsupported tool for agent backend: ${tool3}`);
-    }
-  }
-  async function status() {
-    let connected = false;
-    let error45;
-    try {
-      await ensureAgentSocket();
-      connected = true;
-    } catch (err) {
-      error45 = err instanceof Error ? err.message : String(err);
-    }
-    return {
-      backend: "agent-browser",
-      session,
-      connection,
-      connected,
-      error: error45,
-      agentBrowserVersion: getAgentPackageVersion()
-    };
-  }
-  return {
-    mode: "agent",
-    session,
-    connection,
-    getVersion: getAgentPackageVersion,
-    status,
-    requestTool
-  };
-}
-
-// src/plugin.ts
-import { appendFileSync, existsSync, mkdirSync as mkdirSync2, readFileSync as readFileSync2, statSync } from "fs";
-import { homedir as homedir2, userInfo } from "os";
-import { basename as basename2, dirname as dirname2, isAbsolute as isAbsolute2, join as join2, resolve as resolve2 } from "path";
-import { spawn as spawn2 } from "child_process";
-import { fileURLToPath } from "url";
-var __filename2 = fileURLToPath(import.meta.url);
-var __dirname2 = dirname2(__filename2);
-var PACKAGE_JSON_PATH = join2(__dirname2, "..", "package.json");
-var cachedVersion = null;
-function getPackageVersion() {
-  if (cachedVersion)
-    return cachedVersion;
-  try {
-    const pkg = JSON.parse(readFileSync2(PACKAGE_JSON_PATH, "utf8"));
-    if (typeof pkg?.version === "string") {
-      cachedVersion = pkg.version;
-      return cachedVersion;
-    }
-  } catch {}
-  cachedVersion = "unknown";
-  return cachedVersion;
-}
-var { schema } = tool;
-var BASE_DIR2 = join2(homedir2(), ".opencode-browser");
-var SOCKET_PATH = getBrokerSocketPath();
-var LOG_PATH = join2(BASE_DIR2, "plugin.log");
-function getSafePipeName() {
-  try {
-    const username = userInfo().username || "user";
-    return `opencode-browser-${username}`.replace(/[^a-zA-Z0-9._-]/g, "_");
-  } catch {
-    return "opencode-browser";
-  }
-}
-function getBrokerSocketPath() {
-  const override = process.env.OPENCODE_BROWSER_BROKER_SOCKET;
-  if (override)
-    return override;
-  if (process.platform === "win32")
-    return `\\\\.\\pipe\\${getSafePipeName()}`;
-  return join2(BASE_DIR2, "broker.sock");
-}
-mkdirSync2(BASE_DIR2, { recursive: true });
-function logDebug(message) {
-  try {
-    appendFileSync(LOG_PATH, `[${new Date().toISOString()}] ${message}
-`, "utf8");
-  } catch {}
-}
-logDebug(`plugin loaded v${getPackageVersion()} pid=${process.pid} socket=${SOCKET_PATH}`);
-var DEFAULT_MAX_UPLOAD_BYTES = 512 * 1024;
-var MAX_UPLOAD_BYTES = (() => {
-  const raw = process.env.OPENCODE_BROWSER_MAX_UPLOAD_BYTES;
-  const value = raw ? Number(raw) : NaN;
-  if (Number.isFinite(value) && value > 0)
-    return value;
-  return DEFAULT_MAX_UPLOAD_BYTES;
-})();
-function resolveUploadPath(filePath) {
-  const trimmed = typeof filePath === "string" ? filePath.trim() : "";
-  if (!trimmed)
-    throw new Error("filePath is required");
-  return isAbsolute2(trimmed) ? trimmed : resolve2(process.cwd(), trimmed);
-}
-function buildFileUploadPayload(filePath, fileName, mimeType) {
-  const absPath = resolveUploadPath(filePath);
-  const stats = statSync(absPath);
-  if (!stats.isFile())
-    throw new Error(`Not a file: ${absPath}`);
-  if (stats.size > MAX_UPLOAD_BYTES) {
-    throw new Error(`File too large (${stats.size} bytes). Max is ${MAX_UPLOAD_BYTES} bytes (OPENCODE_BROWSER_MAX_UPLOAD_BYTES). ` + `For larger uploads, use OPENCODE_BROWSER_BACKEND=agent.`);
-  }
-  const base643 = readFileSync2(absPath).toString("base64");
-  const name = typeof fileName === "string" && fileName.trim() ? fileName.trim() : basename2(absPath);
-  const mt = typeof mimeType === "string" && mimeType.trim() ? mimeType.trim() : undefined;
-  return { name, mimeType: mt, base64: base643 };
-}
-function createJsonLineParser2(onMessage) {
-  let buffer = "";
-  return (chunk) => {
-    buffer += chunk.toString("utf8");
-    while (true) {
-      const idx = buffer.indexOf(`
-`);
-      if (idx === -1)
-        return;
-      const line = buffer.slice(0, idx);
-      buffer = buffer.slice(idx + 1);
-      if (!line.trim())
-        continue;
-      try {
-        onMessage(JSON.parse(line));
-      } catch {}
-    }
-  };
-}
-function writeJsonLine2(socket, msg) {
-  socket.write(JSON.stringify(msg) + `
-`);
-}
 function maybeStartBroker() {
-  const brokerPath = join2(BASE_DIR2, "broker.cjs");
+  const brokerPath = join(BASE_DIR, "broker.cjs");
   if (!existsSync(brokerPath))
     return;
   try {
-    const child = spawn2(process.execPath, [brokerPath], { detached: true, stdio: "ignore" });
+    const child = spawn(process.execPath, [brokerPath], { detached: true, stdio: "ignore" });
     child.unref();
   } catch {}
 }
 async function connectToBroker() {
-  return await new Promise((resolve3, reject) => {
-    const socket = net2.createConnection(SOCKET_PATH);
-    socket.once("connect", () => resolve3(socket));
+  return await new Promise((resolve2, reject) => {
+    const socket = net.createConnection(SOCKET_PATH);
+    socket.once("connect", () => resolve2(socket));
     socket.once("error", (err) => {
       lastBrokerError = err instanceof Error ? err : new Error(String(err));
       logDebug(`broker connect error socket=${SOCKET_PATH} error=${lastBrokerError.message}`);
@@ -13228,17 +12455,15 @@ async function connectToBroker() {
     });
   });
 }
-async function sleep2(ms) {
+async function sleep(ms) {
   return await new Promise((r) => setTimeout(r, ms));
 }
 var BACKEND_MODE = (process.env.OPENCODE_BROWSER_BACKEND ?? process.env.OPENCODE_BROWSER_MODE ?? "extension").toLowerCase().trim();
-var USE_AGENT_BACKEND = ["agent", "agent-browser", "agentbrowser"].includes(BACKEND_MODE);
 var socket = null;
 var lastBrokerError = null;
 var sessionId = Math.random().toString(36).slice(2);
 var reqId = 0;
 var pending = new Map;
-var agentBackend = USE_AGENT_BACKEND ? createAgentBackend(sessionId) : null;
 async function ensureBrokerSocket() {
   if (socket && !socket.destroyed)
     return socket;
@@ -13247,7 +12472,7 @@ async function ensureBrokerSocket() {
   } catch {
     maybeStartBroker();
     for (let i = 0;i < 20; i++) {
-      await sleep2(100);
+      await sleep(100);
       try {
         socket = await connectToBroker();
         break;
@@ -13260,7 +12485,7 @@ async function ensureBrokerSocket() {
   }
   socket.setNoDelay(true);
   logDebug(`broker connected socket=${SOCKET_PATH}`);
-  socket.on("data", createJsonLineParser2((msg) => {
+  socket.on("data", createJsonLineParser((msg) => {
     if (msg?.type !== "response" || typeof msg.id !== "number")
       return;
     const p = pending.get(msg.id);
@@ -13279,15 +12504,15 @@ async function ensureBrokerSocket() {
   socket.on("error", () => {
     socket = null;
   });
-  writeJsonLine2(socket, { type: "hello", role: "plugin", sessionId, pid: process.pid });
+  writeJsonLine(socket, { type: "hello", role: "plugin", sessionId, pid: process.pid });
   return socket;
 }
 async function brokerRequest(op, payload) {
   const s = await ensureBrokerSocket();
   const id = ++reqId;
-  return await new Promise((resolve3, reject) => {
-    pending.set(id, { resolve: resolve3, reject });
-    writeJsonLine2(s, { type: "request", id, op, ...payload });
+  return await new Promise((resolve2, reject) => {
+    pending.set(id, { resolve: resolve2, reject });
+    writeJsonLine(s, { type: "request", id, op, ...payload });
     setTimeout(() => {
       if (!pending.has(id))
         return;
@@ -13297,9 +12522,6 @@ async function brokerRequest(op, payload) {
   });
 }
 async function brokerOnlyRequest(op, payload) {
-  if (USE_AGENT_BACKEND) {
-    throw new Error("Tab claims are not supported with agent-browser backend");
-  }
   return await brokerRequest(op, payload);
 }
 function toolResultText(data, fallback) {
@@ -13312,25 +12534,9 @@ function toolResultText(data, fallback) {
   return fallback;
 }
 async function toolRequest(toolName, args) {
-  if (USE_AGENT_BACKEND) {
-    if (!agentBackend) {
-      throw new Error("Agent backend unavailable: configuration failed to initialize");
-    }
-    return await agentBackend.requestTool(toolName, args);
-  }
   return await brokerRequest("tool", { tool: toolName, args });
 }
 async function statusRequest() {
-  if (USE_AGENT_BACKEND) {
-    if (!agentBackend) {
-      return {
-        backend: "agent-browser",
-        connected: false,
-        error: "Agent backend unavailable: configuration failed to initialize"
-      };
-    }
-    return await agentBackend.status();
-  }
   return await brokerRequest("status", {});
 }
 var plugin = async (ctx) => {
@@ -13344,11 +12550,8 @@ var plugin = async (ctx) => {
             "loaded: true",
             `sessionId: ${sessionId}`,
             `pid: ${process.pid}`,
-            `backend: ${USE_AGENT_BACKEND ? "agent-browser" : "extension"}`,
+            `backend: extension`,
             `brokerSocket: ${SOCKET_PATH}`,
-            `agentSession: ${agentBackend?.session ?? ""}`,
-            `agentConnection: ${JSON.stringify(agentBackend?.connection ?? null)}`,
-            `agentBrowserVersion: ${agentBackend?.getVersion?.() ?? ""}`,
             `pluginVersion: ${getPackageVersion()}`,
             `timestamp: ${new Date().toISOString()}`
           ];
@@ -13365,8 +12568,7 @@ var plugin = async (ctx) => {
             version: getPackageVersion(),
             sessionId,
             pid: process.pid,
-            backend: USE_AGENT_BACKEND ? "agent-browser" : "extension",
-            agentBrowserVersion: agentBackend?.getVersion?.() ?? null
+            backend: "extension"
           });
         }
       }),
@@ -13448,17 +12650,15 @@ var plugin = async (ctx) => {
         }
       }),
       browser_click: tool({
-        description: "Click an element on the page using a CSS selector",
+        description: "Click at specific x, y coordinates on the page",
         args: {
-          selector: schema.string(),
-          index: schema.number().optional(),
-          tabId: schema.number().optional(),
-          timeoutMs: schema.number().optional(),
-          pollMs: schema.number().optional()
+          x: schema.number(),
+          y: schema.number(),
+          tabId: schema.number().optional()
         },
-        async execute({ selector, index, tabId, timeoutMs, pollMs }, ctx2) {
-          const data = await toolRequest("click", { selector, index, tabId, timeoutMs, pollMs });
-          return toolResultText(data, `Clicked ${selector}`);
+        async execute({ x, y, tabId }, ctx2) {
+          const data = await toolRequest("click", { x, y, tabId });
+          return toolResultText(data, `Clicked at (${x}, ${y})`);
         }
       }),
       browser_type: tool({
@@ -13606,7 +12806,7 @@ var plugin = async (ctx) => {
         }
       }),
       browser_list_downloads: tool({
-        description: "List recent downloads (Chrome backend) or session downloads (agent backend).",
+        description: "List recent downloads (Chrome backend).",
         args: {
           limit: schema.number().optional(),
           state: schema.string().optional()
@@ -13629,10 +12829,6 @@ var plugin = async (ctx) => {
           pollMs: schema.number().optional()
         },
         async execute({ selector, filePath, fileName, mimeType, index, tabId, timeoutMs, pollMs }, ctx2) {
-          if (USE_AGENT_BACKEND) {
-            const data2 = await toolRequest("set_file_input", { selector, filePath, tabId, index, timeoutMs, pollMs });
-            return toolResultText(data2, "Set file input");
-          }
           const file2 = buildFileUploadPayload(filePath, fileName, mimeType);
           const data = await toolRequest("set_file_input", {
             selector,

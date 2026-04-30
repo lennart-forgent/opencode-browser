@@ -1,16 +1,30 @@
 {
   "name": "@different-ai/opencode-browser",
   "version": "4.6.1",
-  "description": "Browser automation plugin for OpenCode (native messaging + per-tab ownership).",
-  "type": "module",
-  "bin": {
-    "opencode-browser": "bin/cli.js"
+  "author": "Benjamin Shafii",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/different-ai/opencode-browser.git"
   },
   "main": "./dist/plugin.js",
+  "devDependencies": {
+    "@opencode-ai/plugin": "*",
+    "bun-types": "*"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*"
+  },
   "exports": {
     ".": "./dist/plugin.js",
     "./plugin": "./dist/plugin.js"
   },
+  "bin": {
+    "opencode-browser": "bin/cli.js"
+  },
+  "bugs": {
+    "url": "https://github.com/different-ai/opencode-browser/issues"
+  },
+  "description": "Browser automation plugin for OpenCode (native messaging + per-tab ownership).",
   "files": [
     ".opencode",
     "bin",
@@ -18,6 +32,16 @@
     "extension",
     "README.md"
   ],
+  "homepage": "https://github.com/different-ai/opencode-browser#readme",
+  "keywords": [
+    "opencode",
+    "browser",
+    "automation",
+    "chrome",
+    "plugin",
+    "native-messaging"
+  ],
+  "license": "MIT",
   "scripts": {
     "build": "bun build src/plugin.ts --target=node --outfile=dist/plugin.js",
     "build:cws": "node build-cws-package.mjs",
@@ -31,32 +55,5 @@
     "self-test": "node bin/cli.js self-test",
     "tool-test": "bun bin/tool-test.ts"
   },
-  "keywords": [
-    "opencode",
-    "browser",
-    "automation",
-    "chrome",
-    "plugin",
-    "native-messaging"
-  ],
-  "author": "Benjamin Shafii",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/different-ai/opencode-browser.git"
-  },
-  "bugs": {
-    "url": "https://github.com/different-ai/opencode-browser/issues"
-  },
-  "homepage": "https://github.com/different-ai/opencode-browser#readme",
-  "peerDependencies": {
-    "@opencode-ai/plugin": "*"
-  },
-  "dependencies": {
-    "agent-browser": "^0.4.0"
-  },
-  "devDependencies": {
-    "@opencode-ai/plugin": "*",
-    "bun-types": "*"
-  }
+  "type": "module"
 }

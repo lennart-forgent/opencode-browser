@@ -1,7 +1,6 @@
 import type { Plugin } from "@opencode-ai/plugin";
 import { tool } from "@opencode-ai/plugin";
 import net from "net";
-import { createAgentBackend, type AgentBackend } from "./agent-backend.js";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "fs";
 import { homedir, userInfo } from "os";
 import { basename, dirname, isAbsolute, join, resolve } from "path";
@@ -86,10 +85,9 @@ function buildFileUploadPayload(
   const absPath = resolveUploadPath(filePath);
   const stats = statSync(absPath);
   if (!stats.isFile()) throw new Error(`Not a file: ${absPath}`);
-  if (stats.size > MAX_UPLOAD_BYTES) {
+          if (stats.size > MAX_UPLOAD_BYTES) {
     throw new Error(
-      `File too large (${stats.size} bytes). Max is ${MAX_UPLOAD_BYTES} bytes (OPENCODE_BROWSER_MAX_UPLOAD_BYTES). ` +
-        `For larger uploads, use OPENCODE_BROWSER_BACKEND=agent.`
+      `File too large (${stats.size} bytes). Max is ${MAX_UPLOAD_BYTES} bytes (OPENCODE_BROWSER_MAX_UPLOAD_BYTES).`
     );
   }
   const base64 = readFileSync(absPath).toString("base64");
@@ -156,15 +154,12 @@ async function sleep(ms: number): Promise<void> {
 const BACKEND_MODE = (process.env.OPENCODE_BROWSER_BACKEND ?? process.env.OPENCODE_BROWSER_MODE ?? "extension")
   .toLowerCase()
   .trim();
-const USE_AGENT_BACKEND = ["agent", "agent-browser", "agentbrowser"].includes(BACKEND_MODE);
 
 let socket: net.Socket | null = null;
 let lastBrokerError: Error | null = null;
 let sessionId = Math.random().toString(36).slice(2);
 let reqId = 0;
 const pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
-
-const agentBackend: AgentBackend | null = USE_AGENT_BACKEND ? createAgentBackend(sessionId) : null;
 
 async function ensureBrokerSocket(): Promise<net.Socket> {
   if (socket && !socket.destroyed) return socket;
@@ -235,9 +230,6 @@ async function brokerRequest(op: string, payload: Record<string, any>): Promise<
 }
 
 async function brokerOnlyRequest(op: string, payload: Record<string, any>): Promise<any> {
-  if (USE_AGENT_BACKEND) {
-    throw new Error("Tab claims are not supported with agent-browser backend");
-  }
   return await brokerRequest(op, payload);
 }
 
@@ -249,26 +241,10 @@ function toolResultText(data: any, fallback: string): string {
 }
 
 async function toolRequest(toolName: string, args: Record<string, any>): Promise<any> {
-  if (USE_AGENT_BACKEND) {
-    if (!agentBackend) {
-      throw new Error("Agent backend unavailable: configuration failed to initialize");
-    }
-    return await agentBackend.requestTool(toolName, args);
-  }
   return await brokerRequest("tool", { tool: toolName, args });
 }
 
 async function statusRequest(): Promise<any> {
-  if (USE_AGENT_BACKEND) {
-    if (!agentBackend) {
-      return {
-        backend: "agent-browser",
-        connected: false,
-        error: "Agent backend unavailable: configuration failed to initialize",
-      };
-    }
-    return await agentBackend.status();
-  }
   return await brokerRequest("status", {});
 }
 
@@ -284,11 +260,8 @@ const plugin: Plugin = async (ctx) => {
             "loaded: true",
             `sessionId: ${sessionId}`,
             `pid: ${process.pid}`,
-            `backend: ${USE_AGENT_BACKEND ? "agent-browser" : "extension"}`,
+            `backend: extension`,
             `brokerSocket: ${SOCKET_PATH}`,
-            `agentSession: ${agentBackend?.session ?? ""}`,
-            `agentConnection: ${JSON.stringify(agentBackend?.connection ?? null)}`,
-            `agentBrowserVersion: ${agentBackend?.getVersion?.() ?? ""}`,
             `pluginVersion: ${getPackageVersion()}`,
             `timestamp: ${new Date().toISOString()}`,
           ];
@@ -305,8 +278,7 @@ const plugin: Plugin = async (ctx) => {
             version: getPackageVersion(),
             sessionId,
             pid: process.pid,
-            backend: USE_AGENT_BACKEND ? "agent-browser" : "extension",
-            agentBrowserVersion: agentBackend?.getVersion?.() ?? null,
+            backend: "extension",
           });
         },
       }),
@@ -397,17 +369,15 @@ const plugin: Plugin = async (ctx) => {
       }),
 
       browser_click: tool({
-        description: "Click an element on the page using a CSS selector",
+        description: "Click at specific x, y coordinates on the page",
         args: {
-          selector: schema.string(),
-          index: schema.number().optional(),
+          x: schema.number(),
+          y: schema.number(),
           tabId: schema.number().optional(),
-          timeoutMs: schema.number().optional(),
-          pollMs: schema.number().optional(),
         },
-        async execute({ selector, index, tabId, timeoutMs, pollMs }, ctx) {
-          const data = await toolRequest("click", { selector, index, tabId, timeoutMs, pollMs });
-          return toolResultText(data, `Clicked ${selector}`);
+        async execute({ x, y, tabId }, ctx) {
+          const data = await toolRequest("click", { x, y, tabId });
+          return toolResultText(data, `Clicked at (${x}, ${y})`);
         },
       }),
 
@@ -568,7 +538,7 @@ const plugin: Plugin = async (ctx) => {
       }),
 
       browser_list_downloads: tool({
-        description: "List recent downloads (Chrome backend) or session downloads (agent backend).",
+        description: "List recent downloads (Chrome backend).",
         args: {
           limit: schema.number().optional(),
           state: schema.string().optional(),
@@ -592,11 +562,6 @@ const plugin: Plugin = async (ctx) => {
           pollMs: schema.number().optional(),
         },
         async execute({ selector, filePath, fileName, mimeType, index, tabId, timeoutMs, pollMs }, ctx) {
-          if (USE_AGENT_BACKEND) {
-            const data = await toolRequest("set_file_input", { selector, filePath, tabId, index, timeoutMs, pollMs });
-            return toolResultText(data, "Set file input");
-          }
-
           const file = buildFileUploadPayload(filePath, fileName, mimeType);
           const data = await toolRequest("set_file_input", {
             selector,

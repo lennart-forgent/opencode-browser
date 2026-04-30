@@ -730,12 +730,19 @@ async function pageOps(command, args) {
   const flags = typeof options.flags === "string" ? options.flags : "i"
 
   if (command === "click") {
-    const match = await resolveMatches(selectors, index, timeoutMs, pollMs)
-    if (!match.chosen) {
-      return { ok: false, error: `Element not found for selectors: ${selectors.join(", ")}` }
+    const { x, y } = options
+    const el = document.elementFromPoint(x, y)
+    if (!el) {
+      return { ok: false, error: `No element found at coordinates (${x}, ${y})` }
     }
-    clickElement(match.chosen)
-    return { ok: true, selectorUsed: match.selectorUsed }
+    const opts = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }
+    try {
+      el.dispatchEvent(new MouseEvent("mousedown", opts))
+      el.dispatchEvent(new MouseEvent("mouseup", opts))
+      el.dispatchEvent(new MouseEvent("click", opts))
+    } catch {}
+    try { el.click() } catch {}
+    return { ok: true }
   }
 
   if (command === "type") {
@@ -1111,14 +1118,13 @@ async function toolNavigate({ url, tabId }) {
   return { tabId: tab.id, content: `Navigated to ${url}` }
 }
 
-async function toolClick({ selector, tabId, index = 0, timeoutMs, pollMs }) {
-  if (!selector) throw new Error("Selector is required")
+async function toolClick({ x, y, tabId }) {
+  if (typeof x !== "number" || typeof y !== "number") throw new Error("x and y coordinates are required")
   const tab = await getTabById(tabId)
 
-  const result = await runInPage(tab.id, "click", { selector, index, timeoutMs, pollMs })
+  const result = await runInPage(tab.id, "click", { x, y })
   if (!result?.ok) throw new Error(result?.error || "Click failed")
-  const used = result.selectorUsed || selector
-  return { tabId: tab.id, content: `Clicked ${used}` }
+  return { tabId: tab.id, content: `Clicked at (${x}, ${y})` }
 }
 
 async function toolType({ selector, text, tabId, clear = false, index = 0, timeoutMs, pollMs }) {

@@ -98,16 +98,6 @@ async function ensureDebuggerAvailable() {
   return { ok: true }
 }
 
-async function ensureDownloadsAvailable() {
-  if (!chrome.downloads) {
-    throw new Error(`Downloads API unavailable in this build. ${PERMISSION_HINT}`)
-  }
-
-  const granted = await hasDownloadsPermission()
-  if (!granted) {
-    throw new Error(`Downloads permission not granted. ${PERMISSION_HINT}`)
-  }
-}
 
 async function ensureDebuggerAttached(tabId) {
   const availability = await ensureDebuggerAvailable()
@@ -303,8 +293,6 @@ async function executeTool(toolName, args) {
     screenshot: toolScreenshot,
     scroll: toolScroll,
     wait: toolWait,
-    download: toolDownload,
-    list_downloads: toolListDownloads,
     set_file_input: toolSetFileInput,
     highlight: toolHighlight,
     console: toolConsole,
@@ -908,31 +896,6 @@ async function pageOps(command, args) {
   if (command === "scroll") {
     const scrollX = Number.isFinite(options.x) ? options.x : 0
     const scrollY = Number.isFinite(options.y) ? options.y : 0
-    if (selectors.length) {
-      const match = await resolveMatches(selectors, index, timeoutMs, pollMs)
-      if (!match.chosen) {
-        return { ok: false, error: `Element not found for selectors: ${selectors.join(", ")}` }
-      }
-      if (scrollX || scrollY) {
-        try {
-          if (typeof match.chosen.scrollBy === "function") {
-            match.chosen.scrollBy({ left: scrollX, top: scrollY, behavior: "smooth" })
-          } else {
-            match.chosen.scrollLeft = Number(match.chosen.scrollLeft || 0) + scrollX
-            match.chosen.scrollTop = Number(match.chosen.scrollTop || 0) + scrollY
-          }
-        } catch {
-          match.chosen.scrollLeft = Number(match.chosen.scrollLeft || 0) + scrollX
-          match.chosen.scrollTop = Number(match.chosen.scrollTop || 0) + scrollY
-        }
-        return { ok: true, selectorUsed: match.selectorUsed, elementScroll: { x: scrollX, y: scrollY } }
-      }
-
-      try {
-        match.chosen.scrollIntoView({ behavior: "smooth", block: "center" })
-      } catch {}
-      return { ok: true, selectorUsed: match.selectorUsed }
-    }
     window.scrollBy(scrollX, scrollY)
     return { ok: true }
   }
@@ -1097,13 +1060,12 @@ async function toolGetTabs() {
   return { content: JSON.stringify(out, null, 2) }
 }
 
-async function toolScroll({ x = 0, y = 0, selector, tabId, timeoutMs, pollMs }) {
+async function toolScroll({ x = 0, y = 0, tabId }) {
   const tab = await getTabById(tabId)
 
-  const result = await runInPage(tab.id, "scroll", { x, y, selector, timeoutMs, pollMs })
+  const result = await runInPage(tab.id, "scroll", { x, y })
   if (!result?.ok) throw new Error(result?.error || "Scroll failed")
-  const target = result.selectorUsed ? `to ${result.selectorUsed}` : `by (${x}, ${y})`
-  return { tabId: tab.id, content: `Scrolled ${target}` }
+  return { tabId: tab.id, content: `Scrolled by (${x}, ${y})` }
 }
 
 async function toolWait({ ms = 1000, tabId }) {
@@ -1115,126 +1077,6 @@ function clampNumber(value, min, max, fallback) {
   const n = Number(value)
   if (!Number.isFinite(n)) return fallback
   return Math.min(Math.max(n, min), max)
-}
-
-function normalizeDownloadTimeoutMs(value) {
-  return clampNumber(value, 0, 60000, 60000)
-}
-
-function waitForNextDownloadCreated(timeoutMs) {
-  const timeout = normalizeDownloadTimeoutMs(timeoutMs)
-  return new Promise((resolve, reject) => {
-    const listener = (item) => {
-      cleanup()
-      resolve(item)
-    }
-
-    const timer = timeout
-      ? setTimeout(() => {
-          cleanup()
-          reject(new Error("Timed out waiting for download to start"))
-        }, timeout)
-      : null
-
-    function cleanup() {
-      chrome.downloads.onCreated.removeListener(listener)
-      if (timer) clearTimeout(timer)
-    }
-
-    chrome.downloads.onCreated.addListener(listener)
-  })
-}
-
-async function getDownloadById(downloadId) {
-  const items = await chrome.downloads.search({ id: downloadId })
-  return items && items.length ? items[0] : null
-}
-
-async function waitForDownloadCompletion(downloadId, timeoutMs) {
-  const timeout = normalizeDownloadTimeoutMs(timeoutMs)
-  const pollMs = 200
-  const endAt = Date.now() + timeout
-
-  while (true) {
-    const item = await getDownloadById(downloadId)
-    if (item && (item.state === "complete" || item.state === "interrupted")) return item
-    if (!timeout || Date.now() >= endAt) return item
-    await new Promise((resolve) => setTimeout(resolve, pollMs))
-  }
-}
-
-async function toolDownload({
-  url,
-  selector,
-  filename,
-  conflictAction,
-  saveAs = false,
-  wait = false,
-  downloadTimeoutMs,
-  tabId,
-  index = 0,
-  timeoutMs,
-  pollMs,
-}) {
-  const hasUrl = typeof url === "string" && url.trim()
-  const hasSelector = typeof selector === "string" && selector.trim()
-
-  await ensureDownloadsAvailable()
-
-  if (!hasUrl && !hasSelector) throw new Error("url or selector is required")
-  if (hasUrl && hasSelector) throw new Error("Provide either url or selector, not both")
-
-  let downloadId = null
-
-  if (hasUrl) {
-    const options = { url: url.trim() }
-    if (typeof filename === "string" && filename.trim()) options.filename = filename.trim()
-    if (typeof conflictAction === "string" && conflictAction.trim()) options.conflictAction = conflictAction.trim()
-    if (typeof saveAs === "boolean") options.saveAs = saveAs
-
-    downloadId = await chrome.downloads.download(options)
-  } else {
-    const tab = await getTabById(tabId)
-    const created = waitForNextDownloadCreated(downloadTimeoutMs)
-    const clicked = await runInPage(tab.id, "click", { selector, index, timeoutMs, pollMs })
-    if (!clicked?.ok) throw new Error(clicked?.error || "Click failed")
-    const createdItem = await created
-    downloadId = createdItem?.id
-  }
-
-  if (!Number.isFinite(downloadId)) throw new Error("Download did not start")
-
-  if (!wait) {
-    const item = await getDownloadById(downloadId)
-    return { content: { downloadId, item } }
-  }
-
-  const item = await waitForDownloadCompletion(downloadId, downloadTimeoutMs)
-  return { content: { downloadId, item } }
-}
-
-async function toolListDownloads({ limit = 20, state } = {}) {
-  await ensureDownloadsAvailable()
-
-  const limitValue = clampNumber(limit, 1, 200, 20)
-  const query = { orderBy: ["-startTime"], limit: limitValue }
-  if (typeof state === "string" && state.trim()) query.state = state.trim()
-
-  const downloads = await chrome.downloads.search(query)
-  const out = downloads.map((d) => ({
-    id: d.id,
-    url: d.url,
-    filename: d.filename,
-    state: d.state,
-    bytesReceived: d.bytesReceived,
-    totalBytes: d.totalBytes,
-    startTime: d.startTime,
-    endTime: d.endTime,
-    error: d.error,
-    mime: d.mime,
-  }))
-
-  return { content: JSON.stringify({ downloads: out }, null, 2) }
 }
 
 async function toolSetFileInput({ selector, tabId, index = 0, timeoutMs, pollMs, files }) {

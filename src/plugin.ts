@@ -425,17 +425,14 @@ const plugin: Plugin = async (ctx) => {
       }),
 
       browser_scroll: tool({
-        description: "Scroll the page or scroll an element into view",
+        description: "Scroll the page",
         args: {
-          selector: schema.string().optional(),
           x: schema.number().optional(),
           y: schema.number().optional(),
           tabId: schema.number().optional(),
-          timeoutMs: schema.number().optional(),
-          pollMs: schema.number().optional(),
         },
-        async execute({ selector, x, y, tabId, timeoutMs, pollMs }, ctx) {
-          const data = await toolRequest("scroll", { selector, x, y, tabId, timeoutMs, pollMs });
+        async execute({ x, y, tabId }, ctx) {
+          const data = await toolRequest("scroll", { x, y, tabId });
           return toolResultText(data, "Scrolled");
         },
       }),
@@ -449,54 +446,6 @@ const plugin: Plugin = async (ctx) => {
         async execute({ ms, tabId }, ctx) {
           const data = await toolRequest("wait", { ms, tabId });
           return toolResultText(data, "Waited");
-        },
-      }),
-
-      browser_download: tool({
-        description: "Download a file via URL or by clicking an element on the page.",
-        args: {
-          url: schema.string().optional(),
-          selector: schema.string().optional(),
-          filename: schema.string().optional(),
-          conflictAction: schema.string().optional(),
-          saveAs: schema.boolean().optional(),
-          wait: schema.boolean().optional(),
-          downloadTimeoutMs: schema.number().optional(),
-          index: schema.number().optional(),
-          tabId: schema.number().optional(),
-          timeoutMs: schema.number().optional(),
-          pollMs: schema.number().optional(),
-        },
-        async execute(
-          { url, selector, filename, conflictAction, saveAs, wait, downloadTimeoutMs, index, tabId, timeoutMs, pollMs },
-          ctx
-        ) {
-          const data = await toolRequest("download", {
-            url,
-            selector,
-            filename,
-            conflictAction,
-            saveAs,
-            wait,
-            downloadTimeoutMs,
-            index,
-            tabId,
-            timeoutMs,
-            pollMs,
-          });
-          return toolResultText(data, "Download started");
-        },
-      }),
-
-      browser_list_downloads: tool({
-        description: "List recent downloads (Chrome backend).",
-        args: {
-          limit: schema.number().optional(),
-          state: schema.string().optional(),
-        },
-        async execute({ limit, state }, ctx) {
-          const data = await toolRequest("list_downloads", { limit, state });
-          return toolResultText(data, "[]");
         },
       }),
 

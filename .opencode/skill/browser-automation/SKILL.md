@@ -23,7 +23,7 @@ metadata:
 3. Navigate with `browser_navigate` if needed
 4. Wait for UI load using `browser_wait`
 5. Inspect the current page state using `browser_screenshot`
-6. Click, type, or select based on visual analysis
+6. Click or type based on visual analysis
 7. Confirm changes using `browser_screenshot`
 
 ## CLI-first debugging

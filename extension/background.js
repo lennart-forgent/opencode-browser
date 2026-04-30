@@ -292,6 +292,7 @@ async function handleToolRequest(request) {
 
 async function executeTool(toolName, args) {
   const tools = {
+    activate_tab: toolActivateTab,
     get_active_tab: toolGetActiveTab,
     get_tabs: toolGetTabs,
     open_tab: toolOpenTab,
@@ -580,6 +581,15 @@ async function pageOps(command, args) {
   }
 
   return { ok: false, error: `Unknown command: ${String(command)}` }
+}
+
+async function toolActivateTab({ tabId }) {
+  const tab = await getTabById(tabId)
+  await chrome.tabs.update(tab.id, { active: true })
+  await chrome.windows.update(tab.windowId, { focused: true })
+  // Small delay to let the OS compositor draw the window
+  await new Promise((resolve) => setTimeout(resolve, 300))
+  return { tabId: tab.id, content: `Activated tab ${tab.id}` }
 }
 
 async function toolGetActiveTab() {

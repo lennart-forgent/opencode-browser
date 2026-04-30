@@ -12685,6 +12685,7 @@ var plugin = async (ctx) => {
             if (!status?.hostConnected) {
               throw new Error("Chrome extension is not connected (native host offline)");
             }
+            await toolRequest("activate_tab", { tabId });
             return await new Promise((resolve2, reject) => {
               x11.createClient((err, display) => {
                 if (err)

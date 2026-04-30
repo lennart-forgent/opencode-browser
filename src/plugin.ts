@@ -405,6 +405,9 @@ const plugin: Plugin = async (ctx) => {
               throw new Error("Chrome extension is not connected (native host offline)");
             }
 
+            // Activate the tab and focus its window first
+            await toolRequest("activate_tab", { tabId });
+
             return await new Promise<string>((resolve, reject) => {
               x11.createClient((err: any, display: any) => {
                 if (err) return reject(err);

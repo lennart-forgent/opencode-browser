@@ -12661,19 +12661,15 @@ var plugin = async (ctx) => {
         }
       }),
       browser_type: tool({
-        description: "Type text into an input element",
+        description: "Type text into the currently focused element",
         args: {
-          selector: schema.string(),
           text: schema.string(),
           clear: schema.boolean().optional(),
-          index: schema.number().optional(),
-          tabId: schema.number().optional(),
-          timeoutMs: schema.number().optional(),
-          pollMs: schema.number().optional()
+          tabId: schema.number().optional()
         },
-        async execute({ selector, text, clear, index, tabId, timeoutMs, pollMs }, ctx2) {
-          const data = await toolRequest("type", { selector, text, clear, index, tabId, timeoutMs, pollMs });
-          return toolResultText(data, `Typed "${text}" into ${selector}`);
+        async execute({ text, clear, tabId }, ctx2) {
+          const data = await toolRequest("type", { text, clear, tabId });
+          return toolResultText(data, `Typed "${text}"`);
         }
       }),
       browser_screenshot: tool({

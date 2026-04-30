@@ -744,42 +744,35 @@ async function pageOps(command, args) {
   if (command === "type") {
     const text = options.text
     const shouldClear = !!options.clear
-    const match = await resolveMatches(selectors, index, timeoutMs, pollMs)
-    if (!match.chosen) {
-      return { ok: false, error: `Element not found for selectors: ${selectors.join(", ")}` }
+    
+    const active = document.activeElement
+    if (!active || active === document.body) {
+      return { ok: false, error: "No element is currently focused to type into" }
     }
 
-    try {
-      match.chosen.scrollIntoView({ block: "center", inline: "center" })
-    } catch {}
-
-    try {
-      match.chosen.focus()
-    } catch {}
-
-    const tag = match.chosen.tagName
+    const tag = active.tagName
     const isTextInput = tag === "INPUT" || tag === "TEXTAREA"
 
     if (isTextInput) {
-      if (shouldClear) setNativeValue(match.chosen, "")
-      setNativeValue(match.chosen, (match.chosen.value || "") + text)
-      match.chosen.dispatchEvent(new Event("input", { bubbles: true }))
-      match.chosen.dispatchEvent(new Event("change", { bubbles: true }))
-      return { ok: true, selectorUsed: match.selectorUsed }
+      if (shouldClear) setNativeValue(active, "")
+      setNativeValue(active, (active.value || "") + text)
+      active.dispatchEvent(new Event("input", { bubbles: true }))
+      active.dispatchEvent(new Event("change", { bubbles: true }))
+      return { ok: true }
     }
 
-    if (match.chosen.isContentEditable) {
-      if (shouldClear) match.chosen.textContent = ""
+    if (active.isContentEditable) {
+      if (shouldClear) active.textContent = ""
       try {
         document.execCommand("insertText", false, text)
       } catch {
-        match.chosen.textContent = (match.chosen.textContent || "") + text
+        active.textContent = (active.textContent || "") + text
       }
-      match.chosen.dispatchEvent(new Event("input", { bubbles: true }))
-      return { ok: true, selectorUsed: match.selectorUsed }
+      active.dispatchEvent(new Event("input", { bubbles: true }))
+      return { ok: true }
     }
 
-    return { ok: false, error: `Element is not typable: ${match.selectorUsed} (${tag.toLowerCase()})` }
+    return { ok: false, error: `Currently focused element is not typable: ${tag.toLowerCase()}` }
   }
 
   if (command === "set_file_input") {
@@ -968,15 +961,13 @@ async function toolClick({ x, y, tabId }) {
   return { tabId: tab.id, content: `Clicked at (${x}, ${y})` }
 }
 
-async function toolType({ selector, text, tabId, clear = false, index = 0, timeoutMs, pollMs }) {
-  if (!selector) throw new Error("Selector is required")
+async function toolType({ text, tabId, clear = false }) {
   if (text === undefined) throw new Error("Text is required")
   const tab = await getTabById(tabId)
 
-  const result = await runInPage(tab.id, "type", { selector, text, clear, index, timeoutMs, pollMs })
+  const result = await runInPage(tab.id, "type", { text, clear })
   if (!result?.ok) throw new Error(result?.error || "Type failed")
-  const used = result.selectorUsed || selector
-  return { tabId: tab.id, content: `Typed "${text}" into ${used}` }
+  return { tabId: tab.id, content: `Typed "${text}"` }
 }
 
 async function toolScreenshot({ tabId }) {

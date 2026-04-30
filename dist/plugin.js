@@ -12335,11 +12335,13 @@ function tool(input) {
 tool.schema = exports_external;
 // src/plugin.ts
 import net from "net";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, unlinkSync } from "fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "fs";
 import { homedir, userInfo } from "os";
 import { basename, dirname, isAbsolute, join, resolve } from "path";
-import { spawn, execSync } from "child_process";
+import { spawn } from "child_process";
 import { fileURLToPath } from "url";
+import * as x11 from "x11";
+import { PNG } from "pngjs";
 var __filename2 = fileURLToPath(import.meta.url);
 var __dirname2 = dirname(__filename2);
 var PACKAGE_JSON_PATH = join(__dirname2, "..", "package.json");
@@ -12679,13 +12681,52 @@ var plugin = async (ctx) => {
         },
         async execute({ tabId }, ctx2) {
           try {
-            const tmpFile = join(homedir(), `.opencode-screenshot-${Date.now()}.png`);
-            execSync(`scrot -z ${tmpFile}`);
-            const base643 = readFileSync(tmpFile, "base64");
-            try {
-              unlinkSync(tmpFile);
-            } catch (e) {}
-            return `data:image/png;base64,${base643}`;
+            return await new Promise((resolve2, reject) => {
+              x11.createClient((err, display) => {
+                if (err)
+                  return reject(err);
+                try {
+                  const X = display.client;
+                  const root = display.screen[0].root;
+                  const width = display.screen[0].pixel_width;
+                  const height = display.screen[0].pixel_height;
+                  X.GetImage(2, root, 0, 0, width, height, 4294967295, (err2, image) => {
+                    if (err2)
+                      return reject(err2);
+                    try {
+                      const png = new PNG({ width, height });
+                      for (let i = 0;i < image.data.length; i += 4) {
+                        png.data[i] = image.data[i + 2];
+                        png.data[i + 1] = image.data[i + 1];
+                        png.data[i + 2] = image.data[i];
+                        png.data[i + 3] = 255;
+                      }
+                      const chunks = [];
+                      png.on("data", (chunk) => chunks.push(chunk));
+                      png.on("end", () => {
+                        try {
+                          const buf = Buffer.concat(chunks);
+                          const base643 = buf.toString("base64");
+                          resolve2(`data:image/png;base64,${base643}`);
+                        } finally {
+                          X.close();
+                        }
+                      });
+                      png.on("error", (e) => {
+                        X.close();
+                        reject(e);
+                      });
+                      png.pack();
+                    } catch (e) {
+                      X.close();
+                      reject(e);
+                    }
+                  });
+                } catch (e) {
+                  reject(e);
+                }
+              });
+            });
           } catch (err) {
             return `Screenshot failed: ${err.message}`;
           }

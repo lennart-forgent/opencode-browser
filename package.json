@@ -9,6 +9,7 @@
   "main": "./dist/plugin.js",
   "devDependencies": {
     "@opencode-ai/plugin": "*",
+    "@types/pngjs": "^6.0.5",
     "bun-types": "*"
   },
   "peerDependencies": {
@@ -43,7 +44,7 @@
   ],
   "license": "MIT",
   "scripts": {
-    "build": "bun build src/plugin.ts --target=node --outfile=dist/plugin.js",
+    "build": "bun build src/plugin.ts --target=node --external x11 --external pngjs --outfile=dist/plugin.js",
     "build:cws": "node build-cws-package.mjs",
     "check:extension": "node --check extension/background.js",
     "prepublishOnly": "bun run build",
@@ -55,5 +56,9 @@
     "self-test": "node bin/cli.js self-test",
     "tool-test": "bun bin/tool-test.ts"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "pngjs": "^7.0.0",
+    "x11": "^2.3.0"
+  }
 }

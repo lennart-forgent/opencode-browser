@@ -6,6 +6,8 @@ import { homedir, userInfo } from "os";
 import { basename, dirname, isAbsolute, join, resolve } from "path";
 import { spawn, execSync } from "child_process";
 import { fileURLToPath } from "url";
+import * as x11 from "x11";
+import { PNG } from "pngjs";
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -397,11 +399,52 @@ const plugin: Plugin = async (ctx) => {
         },
         async execute({ tabId }, ctx) {
           try {
-            const tmpFile = join(homedir(), `.opencode-screenshot-${Date.now()}.png`);
-            execSync(`scrot -z ${tmpFile}`);
-            const base64 = readFileSync(tmpFile, "base64");
-            try { unlinkSync(tmpFile); } catch (e) {}
-            return `data:image/png;base64,${base64}`;
+            return await new Promise<string>((resolve, reject) => {
+              x11.createClient((err: any, display: any) => {
+                if (err) return reject(err);
+                try {
+                  const X = display.client;
+                  const root = display.screen[0].root;
+                  const width = display.screen[0].pixel_width;
+                  const height = display.screen[0].pixel_height;
+                  
+                  X.GetImage(2, root, 0, 0, width, height, 0xffffffff, (err: any, image: any) => {
+                    if (err) return reject(err);
+                    try {
+                      const png = new PNG({ width, height });
+                      for (let i = 0; i < image.data.length; i += 4) {
+                        png.data[i] = image.data[i + 2];     // R
+                        png.data[i + 1] = image.data[i + 1]; // G
+                        png.data[i + 2] = image.data[i];     // B
+                        png.data[i + 3] = 255;               // A
+                      }
+                      
+                      const chunks: Buffer[] = [];
+                      png.on('data', (chunk) => chunks.push(chunk));
+                      png.on('end', () => {
+                        try {
+                          const buf = Buffer.concat(chunks);
+                          const base64 = buf.toString("base64");
+                          resolve(`data:image/png;base64,${base64}`);
+                        } finally {
+                          X.close();
+                        }
+                      });
+                      png.on('error', (e) => {
+                        X.close();
+                        reject(e);
+                      });
+                      png.pack();
+                    } catch (e) {
+                      X.close();
+                      reject(e);
+                    }
+                  });
+                } catch (e) {
+                  reject(e);
+                }
+              });
+            });
           } catch (err: any) {
             return `Screenshot failed: ${err.message}`;
           }

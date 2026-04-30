@@ -592,25 +592,34 @@ async function toolSync() {
 }
 
 async function toolActivateTab({ tabId, waitMs = 300 }) {
-  const tab = await getTabById(tabId)
+  // 1. Synchronously create a lock for THIS activation
+  let markDone;
+  const isDone = new Promise((r) => { markDone = r });
   
-  if (!tab.active) {
-    await chrome.tabs.update(tab.id, { active: true })
-  }
-  
-  // Only bring the window to the front if Chrome is already the active OS application.
-  // We check if ANY Chrome window is currently focused.
-  const focusedWin = await chrome.windows.getLastFocused()
-  if (focusedWin && focusedWin.focused && focusedWin.id !== tab.windowId) {
-    await chrome.windows.update(tab.windowId, { focused: true })
-  }
+  // 2. Chain it globally immediately, BEFORE yielding the event loop
+  activeWaitPromise = Promise.all([activeWaitPromise, isDone]).catch(() => {});
 
-  const delay = Number.isFinite(waitMs) ? waitMs : 300
-  const p = new Promise((resolve) => setTimeout(resolve, delay))
-  activeWaitPromise = p
-  await p
-  
-  return { tabId: tab.id, content: `Activated tab ${tab.id}` }
+  try {
+    const tab = await getTabById(tabId)
+    
+    if (!tab.active) {
+      await chrome.tabs.update(tab.id, { active: true })
+    }
+    
+    // Only bring the window to the front if Chrome is already the active OS application.
+    const focusedWin = await chrome.windows.getLastFocused()
+    if (focusedWin && focusedWin.focused && focusedWin.id !== tab.windowId) {
+      await chrome.windows.update(tab.windowId, { focused: true })
+    }
+
+    const delay = Number.isFinite(waitMs) ? waitMs : 300
+    await new Promise((resolve) => setTimeout(resolve, delay))
+    
+    return { tabId: tab.id, content: `Activated tab ${tab.id}` }
+  } finally {
+    // 3. Release the lock no matter what happens
+    markDone();
+  }
 }
 
 async function toolGetActiveTab() {

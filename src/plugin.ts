@@ -393,7 +393,7 @@ const plugin: Plugin = async (ctx) => {
       }),
 
       browser_screenshot: tool({
-        description: "Take a screenshot of the current page. Returns base64 image data URL.",
+        description: "Takes a screenshot of the current page. Saves to a local file so it can be viewed with the read tool.",
         args: {
           tabId: schema.number().optional(),
         },

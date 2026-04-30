@@ -12687,12 +12687,18 @@ var plugin = async (ctx) => {
       }),
       browser_screenshot: tool({
         description: "Takes a screenshot of the current page. Saves to a local file so it can be viewed with the read tool.",
-        args: {},
-        async execute(args, ctx2) {
+        args: {
+          tabId: schema.number().optional(),
+          waitMs: schema.number().optional().describe("Milliseconds to wait after activation if tabId is provided. Defaults to 300ms.")
+        },
+        async execute({ tabId, waitMs = 300 }, ctx2) {
           try {
             const status = await statusRequest();
             if (!status?.hostConnected) {
               throw new Error("Chrome extension is not connected (native host offline)");
+            }
+            if (tabId !== undefined) {
+              await toolRequest("activate_tab", { tabId, waitMs });
             }
             await toolRequest("sync", {});
             return await new Promise((resolve2, reject) => {

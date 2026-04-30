@@ -151,10 +151,6 @@ async function sleep(ms: number): Promise<void> {
   return await new Promise((r) => setTimeout(r, ms));
 }
 
-const BACKEND_MODE = (process.env.OPENCODE_BROWSER_BACKEND ?? process.env.OPENCODE_BROWSER_MODE ?? "extension")
-  .toLowerCase()
-  .trim();
-
 let socket: net.Socket | null = null;
 let lastBrokerError: Error | null = null;
 let sessionId = Math.random().toString(36).slice(2);

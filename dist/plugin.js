@@ -12458,7 +12458,6 @@ async function connectToBroker() {
 async function sleep(ms) {
   return await new Promise((r) => setTimeout(r, ms));
 }
-var BACKEND_MODE = (process.env.OPENCODE_BROWSER_BACKEND ?? process.env.OPENCODE_BROWSER_MODE ?? "extension").toLowerCase().trim();
 var socket = null;
 var lastBrokerError = null;
 var sessionId = Math.random().toString(36).slice(2);

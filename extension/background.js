@@ -586,7 +586,14 @@ async function pageOps(command, args) {
 async function toolActivateTab({ tabId }) {
   const tab = await getTabById(tabId)
   await chrome.tabs.update(tab.id, { active: true })
-  await chrome.windows.update(tab.windowId, { focused: true })
+  
+  // Only bring the window to the front if Chrome is already the active OS application.
+  // We check if ANY Chrome window is currently focused.
+  const focusedWin = await chrome.windows.getLastFocused()
+  if (focusedWin && focusedWin.focused) {
+    await chrome.windows.update(tab.windowId, { focused: true })
+  }
+
   // Small delay to let the OS compositor draw the window
   await new Promise((resolve) => setTimeout(resolve, 300))
   return { tabId: tab.id, content: `Activated tab ${tab.id}` }

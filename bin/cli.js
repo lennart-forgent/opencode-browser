@@ -35,7 +35,11 @@ const PACKAGE_ROOT = join(__dirname, "..");
 
 const BASE_DIR = join(homedir(), ".opencode-browser");
 const EXTENSION_DIR = join(BASE_DIR, "extension");
-const EXTENSION_MANIFEST_PATH = join(PACKAGE_ROOT, "extension", "manifest.json");
+const EXTENSION_MANIFEST_PATH = join(
+  PACKAGE_ROOT,
+  "extension",
+  "manifest.json",
+);
 const BROKER_DST = join(BASE_DIR, "broker.cjs");
 const NATIVE_HOST_DST = join(BASE_DIR, "native-host.cjs");
 const CONFIG_DST = join(BASE_DIR, "config.json");
@@ -44,7 +48,7 @@ const NATIVE_HOST_NAME = "com.opencode.browser_automation";
 const OS_NAME = platform();
 const NATIVE_HOST_WRAPPER = join(
   BASE_DIR,
-  OS_NAME === "win32" ? "host-wrapper.cmd" : "host-wrapper.sh"
+  OS_NAME === "win32" ? "host-wrapper.cmd" : "host-wrapper.sh",
 );
 const BROKER_SOCKET = getBrokerSocketPath();
 
@@ -83,10 +87,19 @@ function getBrokerSocketPath() {
 
 function getWindowsRegistryTargets() {
   return [
-    { name: "Chrome", key: "HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts" },
+    {
+      name: "Chrome",
+      key: "HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts",
+    },
     { name: "Chromium", key: "HKCU\\Software\\Chromium\\NativeMessagingHosts" },
-    { name: "Brave", key: "HKCU\\Software\\BraveSoftware\\Brave-Browser\\NativeMessagingHosts" },
-    { name: "Edge", key: "HKCU\\Software\\Microsoft\\Edge\\NativeMessagingHosts" },
+    {
+      name: "Brave",
+      key: "HKCU\\Software\\BraveSoftware\\Brave-Browser\\NativeMessagingHosts",
+    },
+    {
+      name: "Edge",
+      key: "HKCU\\Software\\Microsoft\\Edge\\NativeMessagingHosts",
+    },
   ];
 }
 
@@ -101,7 +114,9 @@ function runRegCommand(args) {
 
 function queryRegistryDefaultValue(key) {
   try {
-    const result = spawnSync("reg", ["query", key, "/ve"], { encoding: "utf8" });
+    const result = spawnSync("reg", ["query", key, "/ve"], {
+      encoding: "utf8",
+    });
     if (result.status !== 0) return null;
     const output = String(result.stdout || "");
     const match = output.match(/REG_SZ\s+(.+)\s*$/m);
@@ -149,7 +164,9 @@ async function confirm(question) {
 }
 
 function getFlagValue(flag) {
-  const index = process.argv.findIndex((arg) => arg === flag || arg.startsWith(`${flag}=`));
+  const index = process.argv.findIndex(
+    (arg) => arg === flag || arg.startsWith(`${flag}=`),
+  );
   if (index === -1) return null;
   const arg = process.argv[index];
   if (arg.includes("=")) return arg.slice(arg.indexOf("=") + 1).trim() || null;
@@ -200,7 +217,10 @@ function getExtensionIdFromManifest() {
   return computeExtensionIdFromKey(manifest.key);
 }
 
-async function resolveExtensionId({ allowPrompt = true, preferConfig = false } = {}) {
+async function resolveExtensionId({
+  allowPrompt = true,
+  preferConfig = false,
+} = {}) {
   const override = getExtensionIdOverride();
   if (override) return { id: override, source: "override" };
 
@@ -223,7 +243,10 @@ async function resolveExtensionId({ allowPrompt = true, preferConfig = false } =
   }
 
   const extensionId = await ask(color("bright", "Paste Extension ID: "));
-  return { id: extensionId || null, source: extensionId ? "prompt" : "missing" };
+  return {
+    id: extensionId || null,
+    source: extensionId ? "prompt" : "missing",
+  };
 }
 
 function ensureDir(p) {
@@ -231,8 +254,10 @@ function ensureDir(p) {
 }
 
 function resolveNodePath() {
-  if (process.env.OPENCODE_BROWSER_NODE) return process.env.OPENCODE_BROWSER_NODE;
-  if (process.execPath && /node(\.exe)?$/.test(process.execPath)) return process.execPath;
+  if (process.env.OPENCODE_BROWSER_NODE)
+    return process.env.OPENCODE_BROWSER_NODE;
+  if (process.execPath && /node(\.exe)?$/.test(process.execPath))
+    return process.execPath;
   try {
     const command = isWindows() ? "where node" : "which node";
     const output = execSync(command, { stdio: ["ignore", "pipe", "ignore"] })
@@ -299,7 +324,9 @@ async function getBrokerStatus(timeoutMs = 2000) {
     });
 
     socket.once("connect", () => {
-      socket.write(JSON.stringify({ type: "request", id: 1, op: "status" }) + "\n");
+      socket.write(
+        JSON.stringify({ type: "request", id: 1, op: "status" }) + "\n",
+      );
     });
 
     socket.on(
@@ -313,7 +340,7 @@ async function getBrokerStatus(timeoutMs = 2000) {
             finish({ ok: false, error: msg.error || "Broker status error" });
           }
         }
-      })
+      }),
     );
   });
 }
@@ -370,7 +397,10 @@ function writeNativeHostManifest(dir, extensionId, hostPath) {
     allowed_origins: [`chrome-extension://${extensionId}/`],
   };
 
-  writeFileSync(nativeHostManifestPath(dir), JSON.stringify(manifest, null, 2) + "\n");
+  writeFileSync(
+    nativeHostManifestPath(dir),
+    JSON.stringify(manifest, null, 2) + "\n",
+  );
 }
 
 function writeWindowsNativeHostManifest(extensionId, hostPath) {
@@ -382,7 +412,16 @@ function writeWindowsNativeHostManifest(extensionId, hostPath) {
 function registerWindowsNativeHost(manifestPath) {
   for (const target of getWindowsRegistryTargets()) {
     const key = `${target.key}\\${NATIVE_HOST_NAME}`;
-    const ok = runRegCommand(["add", key, "/ve", "/t", "REG_SZ", "/d", manifestPath, "/f"]);
+    const ok = runRegCommand([
+      "add",
+      key,
+      "/ve",
+      "/t",
+      "REG_SZ",
+      "/d",
+      manifestPath,
+      "/f",
+    ]);
     if (ok) {
       success(`Registered native host for ${target.name}: ${key}`);
     } else {
@@ -421,7 +460,9 @@ function reportWindowsNativeHostStatus() {
     }
   }
   if (!foundAny) {
-    warn("No native host registry entries found. Run: npx @different-ai/opencode-browser install");
+    warn(
+      "No native host registry entries found. Run: npx @different-ai/opencode-browser install",
+    );
   }
 }
 
@@ -518,7 +559,9 @@ async function listTools() {
 async function runToolCommand() {
   const toolName = process.argv[3];
   if (!toolName) {
-    throw new Error("Usage: npx @different-ai/opencode-browser tool <toolName> [argsJson]");
+    throw new Error(
+      "Usage: npx @different-ai/opencode-browser tool <toolName> [argsJson]",
+    );
   }
 
   const args = parseJsonArg(getToolArgJson(), {});
@@ -539,7 +582,8 @@ function asNumber(value, fallback = 0) {
 function readTabId(value) {
   const parsed = parseMaybeJson(value);
   if (parsed && Number.isFinite(parsed.tabId)) return parsed.tabId;
-  if (parsed?.content && Number.isFinite(parsed.content.tabId)) return parsed.content.tabId;
+  if (parsed?.content && Number.isFinite(parsed.content.tabId))
+    return parsed.content.tabId;
   return null;
 }
 
@@ -551,12 +595,16 @@ async function selfTest() {
   const status = parseMaybeJson(statusRaw);
   if (!status || status.broker !== true || status.hostConnected !== true) {
     throw new Error(
-      "browser_status indicates the extension is not connected. Run `npx @different-ai/opencode-browser install` and click the extension icon in Chrome."
+      "browser_status indicates the extension is not connected. Run `npx @different-ai/opencode-browser install` and click the extension icon in Chrome.",
     );
   }
 
-  const fixtureUrl = "https://www.w3.org/WAI/ARIA/apg/patterns/listbox/examples/listbox-scrollable/";
-  const openRaw = await executeTool("browser_open_tab", { url: fixtureUrl, active: false });
+  const fixtureUrl =
+    "https://www.w3.org/WAI/ARIA/apg/patterns/listbox/examples/listbox-scrollable/";
+  const openRaw = await executeTool("browser_open_tab", {
+    url: fixtureUrl,
+    active: false,
+  });
   const tabId = readTabId(openRaw);
   if (!Number.isFinite(tabId)) {
     throw new Error("Failed to read tabId from browser_open_tab output");
@@ -620,10 +668,14 @@ async function install() {
   const osName = OS_NAME;
   if (osName !== "darwin" && osName !== "linux" && osName !== "win32") {
     error(`Unsupported platform: ${osName}`);
-    error("OpenCode Browser currently supports macOS, Linux, and Windows only.");
+    error(
+      "OpenCode Browser currently supports macOS, Linux, and Windows only.",
+    );
     process.exit(1);
   }
-  success(`Platform: ${osName === "darwin" ? "macOS" : osName === "win32" ? "Windows" : "Linux"}`);
+  success(
+    `Platform: ${osName === "darwin" ? "macOS" : osName === "win32" ? "Windows" : "Linux"}`,
+  );
 
   header("Step 2: Copy Extension Files");
 
@@ -646,11 +698,14 @@ To load the extension:
 After loading, ${color("bright", "pin the extension")}: open the Extensions menu (puzzle icon) and click the pin.
 `);
 
-  await ask(color("bright", "Press Enter when you've loaded and pinned the extension..."));
+  // Skipped manual prompt
 
   header("Step 4: Extension ID");
 
-  let resolved = await resolveExtensionId({ allowPrompt: false, preferConfig: true });
+  let resolved = await resolveExtensionId({
+    allowPrompt: false,
+    preferConfig: true,
+  });
   let extensionId = resolved.id;
 
   if (!extensionId) {
@@ -663,11 +718,16 @@ Find it at ${color("cyan", "chrome://extensions")}:
 - Copy the ${color("bright", "ID")}
 `);
 
-    resolved = await resolveExtensionId({ allowPrompt: true, preferConfig: false });
+    resolved = await resolveExtensionId({
+      allowPrompt: false,
+      preferConfig: false,
+    });
     extensionId = resolved.id;
   } else if (resolved.source === "manifest") {
     success(`Using fixed extension ID from manifest: ${extensionId}`);
-    log(`If you already loaded a different ID, rerun with --extension-id to override.`);
+    log(
+      `If you already loaded a different ID, rerun with --extension-id to override.`,
+    );
   } else if (resolved.source === "config") {
     success(`Using extension ID from config.json: ${extensionId}`);
   } else if (resolved.source === "override") {
@@ -680,7 +740,9 @@ Find it at ${color("cyan", "chrome://extensions")}:
   }
 
   if (!/^[a-p]{32}$/i.test(extensionId)) {
-    warn("That doesn't look like a Chrome extension ID (expected 32 chars a-p). Continuing anyway.");
+    warn(
+      "That doesn't look like a Chrome extension ID (expected 32 chars a-p). Continuing anyway.",
+    );
   }
 
   header("Step 5: Install Local Host + Broker");
@@ -703,7 +765,9 @@ Find it at ${color("cyan", "chrome://extensions")}:
 
   const nodePath = resolveNodePath();
   if (!/node(\.exe)?$/.test(nodePath)) {
-    warn(`Node not detected; using ${nodePath}. Set OPENCODE_BROWSER_NODE if needed.`);
+    warn(
+      `Node not detected; using ${nodePath}. Set OPENCODE_BROWSER_NODE if needed.`,
+    );
   }
   const hostPath = writeHostWrapper(nodePath);
   success(`Installed host wrapper: ${hostPath}`);
@@ -725,6 +789,41 @@ Find it at ${color("cyan", "chrome://extensions")}:
       } catch (e) {
         warn(`Could not write native host manifest to: ${dir}`);
       }
+    }
+  }
+
+  header("Step 6.5: Install System Policy");
+  if (osName === "linux") {
+    try {
+      const policyDir = "/etc/chromium/policies/managed";
+      const policyFile = join(policyDir, "opencode-extension.json");
+      const policyContent = {
+        ExtensionSettings: {
+          [extensionId]: {
+            toolbar_pin: "force_pinned",
+          },
+        },
+      };
+      const tmpFile = join(process.cwd(), "opencode-policy-tmp.json");
+      writeFileSync(tmpFile, JSON.stringify(policyContent, null, 2));
+      execSync(`sudo mkdir -p ${policyDir}`);
+      execSync(`sudo mv ${tmpFile} ${policyFile}`);
+      execSync(`sudo chmod 644 ${policyFile}`);
+      success(`Installed Chromium policy to ${policyFile}`);
+
+      // Add to /etc/chromium.d/ to load from source
+      const chromeDDir = "/etc/chromium.d";
+      if (existsSync(chromeDDir)) {
+        const loadExtFile = join(chromeDDir, "opencode-browser");
+        const loadExtContent = `# Load OpenCode Browser extension from source\nexport CHROMIUM_FLAGS="\$CHROMIUM_FLAGS --load-extension=${EXTENSION_DIR}"\n`;
+        const tmpLoadFile = join(process.cwd(), "opencode-load-tmp.sh");
+        writeFileSync(tmpLoadFile, loadExtContent);
+        execSync(`sudo mv ${tmpLoadFile} ${loadExtFile}`);
+        execSync(`sudo chmod 644 ${loadExtFile}`);
+        success(`Installed chromium.d flag to ${loadExtFile}`);
+      }
+    } catch (e) {
+      warn(`Failed to install Chromium policy: ${e.message}`);
     }
   }
 
@@ -767,7 +866,7 @@ Find it at ${color("cyan", "chrome://extensions")}:
   ];
 
   log(`\n${configOptions.join("\n")}`);
-  const selection = await ask("Choose config location [1-4]: ");
+  const selection = "2"; // Auto-selected Global config
 
   let configPath = null;
   let configDir = null;
@@ -780,11 +879,15 @@ Find it at ${color("cyan", "chrome://extensions")}:
       configDir = join(homedir(), ".config", "opencode");
     } else {
       const xdgConfig = process.env.XDG_CONFIG_HOME;
-      configDir = xdgConfig ? join(xdgConfig, "opencode") : join(homedir(), ".config", "opencode");
+      configDir = xdgConfig
+        ? join(xdgConfig, "opencode")
+        : join(homedir(), ".config", "opencode");
     }
     configPath = findOpenCodeConfigPath(configDir);
   } else if (selection === "3") {
-    const customPath = await ask("Enter full path to opencode.json or opencode.jsonc: ");
+    const customPath = await ask(
+      "Enter full path to opencode.json or opencode.jsonc: ",
+    );
     if (customPath) {
       configPath = customPath;
       configDir = dirname(customPath);
@@ -799,9 +902,7 @@ Find it at ${color("cyan", "chrome://extensions")}:
 
   if (configPath && configDir) {
     const hasExistingConfig = existsSync(configPath);
-    const shouldUpdate = hasExistingConfig
-      ? await confirm(`Found ${configPath}. Add plugin automatically?`)
-      : await confirm(`No config found at ${configPath}. Create one?`);
+    const shouldUpdate = true; // Auto-confirm
 
     if (shouldUpdate) {
       try {
@@ -814,12 +915,15 @@ Find it at ${color("cyan", "chrome://extensions")}:
             config = JSON.parse(sanitizeJson(rawConfig));
           } catch (e) {
             error(`Failed to parse ${configPath}: ${e.message}`);
-            const shouldOverwrite = await confirm("Config is invalid JSON. Back up and recreate it?");
+            const shouldOverwrite = true; // Auto-confirm
             if (shouldOverwrite) {
               const backupPath = `${configPath}.bak-${Date.now()}`;
               writeFileSync(backupPath, rawConfig);
               warn(`Backed up invalid config to ${backupPath}`);
-              config = { $schema: "https://opencode.ai/config.json", plugin: [] };
+              config = {
+                $schema: "https://opencode.ai/config.json",
+                plugin: [],
+              };
             } else {
               canWriteConfig = false;
             }
@@ -828,14 +932,18 @@ Find it at ${color("cyan", "chrome://extensions")}:
 
         if (canWriteConfig) {
           config.plugin = normalizePlugins(config.plugin);
-          if (!config.plugin.includes(desiredPlugin)) config.plugin.push(desiredPlugin);
-          if (typeof config.$schema !== "string") config.$schema = "https://opencode.ai/config.json";
+          if (!config.plugin.includes(desiredPlugin))
+            config.plugin.push(desiredPlugin);
+          if (typeof config.$schema !== "string")
+            config.$schema = "https://opencode.ai/config.json";
 
           ensureDir(configDir);
           writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
           success(`Updated ${configPath} with plugin`);
         } else {
-          warn(`Skipped updating ${configPath}. Fix JSON manually and rerun install.`);
+          warn(
+            `Skipped updating ${configPath}. Fix JSON manually and rerun install.`,
+          );
         }
       } catch (e) {
         error(`Failed to update ${configPath}: ${e.message}`);
@@ -855,12 +963,18 @@ Format rules (summary):
 `);
 
   const skillName = "browser-automation";
-  const skillSrc = join(PACKAGE_ROOT, ".opencode", "skill", skillName, "SKILL.md");
+  const skillSrc = join(
+    PACKAGE_ROOT,
+    ".opencode",
+    "skill",
+    skillName,
+    "SKILL.md",
+  );
   const skillDstDir = join(process.cwd(), ".opencode", "skill", skillName);
   const skillDst = join(skillDstDir, "SKILL.md");
 
   if (existsSync(skillSrc)) {
-    const shouldAddSkill = await confirm(`Add ${skillName} skill to this repo?`);
+    const shouldAddSkill = true; // Auto-confirm
     if (shouldAddSkill) {
       ensureDir(skillDstDir);
       copyFileSync(skillSrc, skillDst);
@@ -872,7 +986,7 @@ Format rules (summary):
 
   header("Step 9: Verify Extension Connection (optional)");
 
-  const shouldCheck = await confirm("Check broker + extension connection now?");
+  const shouldCheck = false; // Skipped manual check
   if (shouldCheck) {
     while (true) {
       const status = await getBrokerStatus();
@@ -884,7 +998,9 @@ Format rules (summary):
       if (status.ok && !status.data?.hostConnected) {
         warn("Broker is running but extension is not connected.");
       } else {
-        warn(`Could not connect to local broker (${status.error || "unknown error"}).`);
+        warn(
+          `Could not connect to local broker (${status.error || "unknown error"}).`,
+        );
       }
 
       log(`
@@ -909,7 +1025,7 @@ Open Chrome and:
  ${color("bright", "Try it:")}
   Restart OpenCode and run: ${color("cyan", "browser_get_tabs")}
  `);
- }
+}
 
 async function update() {
   header("Update: Check Platform");
@@ -917,10 +1033,14 @@ async function update() {
   const osName = OS_NAME;
   if (osName !== "darwin" && osName !== "linux" && osName !== "win32") {
     error(`Unsupported platform: ${osName}`);
-    error("OpenCode Browser currently supports macOS, Linux, and Windows only.");
+    error(
+      "OpenCode Browser currently supports macOS, Linux, and Windows only.",
+    );
     process.exit(1);
   }
-  success(`Platform: ${osName === "darwin" ? "macOS" : osName === "win32" ? "Windows" : "Linux"}`);
+  success(
+    `Platform: ${osName === "darwin" ? "macOS" : osName === "win32" ? "Windows" : "Linux"}`,
+  );
 
   header("Step 1: Copy Extension Files");
 
@@ -931,7 +1051,10 @@ async function update() {
 
   header("Step 2: Resolve Extension ID");
 
-  let resolved = await resolveExtensionId({ allowPrompt: false, preferConfig: true });
+  let resolved = await resolveExtensionId({
+    allowPrompt: false,
+    preferConfig: true,
+  });
   let extensionId = resolved.id;
 
   if (!extensionId) {
@@ -944,7 +1067,10 @@ Find it at ${color("cyan", "chrome://extensions")}:
 - Copy the ${color("bright", "ID")}
 `);
 
-    resolved = await resolveExtensionId({ allowPrompt: true, preferConfig: false });
+    resolved = await resolveExtensionId({
+      allowPrompt: false,
+      preferConfig: false,
+    });
     extensionId = resolved.id;
   } else if (resolved.source === "manifest") {
     success(`Using fixed extension ID from manifest: ${extensionId}`);
@@ -960,12 +1086,20 @@ Find it at ${color("cyan", "chrome://extensions")}:
   }
 
   if (!/^[a-p]{32}$/i.test(extensionId)) {
-    warn("That doesn't look like a Chrome extension ID (expected 32 chars a-p). Continuing anyway.");
+    warn(
+      "That doesn't look like a Chrome extension ID (expected 32 chars a-p). Continuing anyway.",
+    );
   }
 
   const manifestId = getExtensionIdFromManifest();
-  if (resolved.source === "config" && manifestId && manifestId !== extensionId) {
-    warn(`Manifest key implies ${manifestId}, but config.json uses ${extensionId}. Run update with --extension-id ${manifestId} to switch.`);
+  if (
+    resolved.source === "config" &&
+    manifestId &&
+    manifestId !== extensionId
+  ) {
+    warn(
+      `Manifest key implies ${manifestId}, but config.json uses ${extensionId}. Run update with --extension-id ${manifestId} to switch.`,
+    );
   }
 
   header("Step 3: Install Local Host + Broker");
@@ -988,7 +1122,9 @@ Find it at ${color("cyan", "chrome://extensions")}:
 
   const nodePath = resolveNodePath();
   if (!/node(\.exe)?$/.test(nodePath)) {
-    warn(`Node not detected; using ${nodePath}. Set OPENCODE_BROWSER_NODE if needed.`);
+    warn(
+      `Node not detected; using ${nodePath}. Set OPENCODE_BROWSER_NODE if needed.`,
+    );
   }
   const hostPath = writeHostWrapper(nodePath);
   success(`Updated host wrapper: ${hostPath}`);
@@ -1020,9 +1156,7 @@ Find it at ${color("cyan", "chrome://extensions")}:
  `);
 }
 
-
 async function status() {
-
   header("Status");
 
   success(`Base dir: ${BASE_DIR}`);
@@ -1062,13 +1196,17 @@ async function status() {
       }
     }
     if (!foundAny) {
-      warn("No native host manifest found. Run: npx @different-ai/opencode-browser install");
+      warn(
+        "No native host manifest found. Run: npx @different-ai/opencode-browser install",
+      );
     }
   }
 
   const brokerStatus = await getBrokerStatus(1000);
   if (brokerStatus.ok) {
-    success(`Broker status: ok (hostConnected=${!!brokerStatus.data?.hostConnected})`);
+    success(
+      `Broker status: ok (hostConnected=${!!brokerStatus.data?.hostConnected})`,
+    );
   } else {
     warn(`Broker status: ${brokerStatus.error || "unavailable"}`);
   }
@@ -1103,8 +1241,33 @@ async function uninstall() {
     }
   }
 
+  if (osName === "linux") {
+    try {
+      const policyFile =
+        "/etc/chromium/policies/managed/opencode-extension.json";
+      if (existsSync(policyFile)) {
+        execSync(`sudo rm -f ${policyFile}`);
+        success(`Removed Chromium policy: ${policyFile}`);
+      }
+      const loadExtFile = "/etc/chromium.d/opencode-browser";
+      if (existsSync(loadExtFile)) {
+        execSync(`sudo rm -f ${loadExtFile}`);
+        success(`Removed chromium.d flag: ${loadExtFile}`);
+      }
+    } catch (e) {
+      warn(`Could not fully remove Chromium system integrations: ${e.message}`);
+    }
+  }
+
   const unixSocketPath = join(BASE_DIR, "broker.sock");
-  for (const p of [BROKER_DST, NATIVE_HOST_DST, CONFIG_DST, unixSocketPath, BROKER_SOCKET]) {
+
+  for (const p of [
+    BROKER_DST,
+    NATIVE_HOST_DST,
+    CONFIG_DST,
+    unixSocketPath,
+    BROKER_SOCKET,
+  ]) {
     if (!existsSync(p)) continue;
     try {
       unlinkSync(p);

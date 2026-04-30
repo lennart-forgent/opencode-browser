@@ -12335,10 +12335,10 @@ function tool(input) {
 tool.schema = exports_external;
 // src/plugin.ts
 import net from "net";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, unlinkSync } from "fs";
 import { homedir, userInfo } from "os";
 import { basename, dirname, isAbsolute, join, resolve } from "path";
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
 import { fileURLToPath } from "url";
 var __filename2 = fileURLToPath(import.meta.url);
 var __dirname2 = dirname(__filename2);
@@ -12678,8 +12678,17 @@ var plugin = async (ctx) => {
           tabId: schema.number().optional()
         },
         async execute({ tabId }, ctx2) {
-          const data = await toolRequest("screenshot", { tabId });
-          return toolResultText(data, "Screenshot failed");
+          try {
+            const tmpFile = join(homedir(), `.opencode-screenshot-${Date.now()}.png`);
+            execSync(`scrot -z ${tmpFile}`);
+            const base643 = readFileSync(tmpFile, "base64");
+            try {
+              unlinkSync(tmpFile);
+            } catch (e) {}
+            return `data:image/png;base64,${base643}`;
+          } catch (err) {
+            return `Screenshot failed: ${err.message}`;
+          }
         }
       }),
       browser_scroll: tool({

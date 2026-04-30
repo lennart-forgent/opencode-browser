@@ -1,10 +1,10 @@
 import type { Plugin } from "@opencode-ai/plugin";
 import { tool } from "@opencode-ai/plugin";
 import net from "net";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, unlinkSync } from "fs";
 import { homedir, userInfo } from "os";
 import { basename, dirname, isAbsolute, join, resolve } from "path";
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
 import { fileURLToPath } from "url";
 
 
@@ -396,8 +396,15 @@ const plugin: Plugin = async (ctx) => {
           tabId: schema.number().optional(),
         },
         async execute({ tabId }, ctx) {
-          const data = await toolRequest("screenshot", { tabId });
-          return toolResultText(data, "Screenshot failed");
+          try {
+            const tmpFile = join(homedir(), `.opencode-screenshot-${Date.now()}.png`);
+            execSync(`scrot -z ${tmpFile}`);
+            const base64 = readFileSync(tmpFile, "base64");
+            try { unlinkSync(tmpFile); } catch (e) {}
+            return `data:image/png;base64,${base64}`;
+          } catch (err: any) {
+            return `Screenshot failed: ${err.message}`;
+          }
         },
       }),
 

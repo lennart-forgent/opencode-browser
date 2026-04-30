@@ -408,9 +408,8 @@ const plugin: Plugin = async (ctx) => {
         description: "Takes a screenshot of the current page. Saves to a local file so it can be viewed with the read tool.",
         args: {
           tabId: schema.number().optional(),
-          waitMs: schema.number().optional().describe("Milliseconds to wait after activation if tabId is provided. Defaults to 300ms."),
         },
-        async execute({ tabId, waitMs = 300 }, ctx) {
+        async execute({ tabId }, ctx) {
           try {
             // Verify browser extension is connected
             const status = await statusRequest();
@@ -419,7 +418,8 @@ const plugin: Plugin = async (ctx) => {
             }
 
             if (tabId !== undefined) {
-              await toolRequest("activate_tab", { tabId, waitMs });
+              // Automatically activate the tab and wait the default 300ms compositor delay
+              await toolRequest("activate_tab", { tabId });
             }
 
             // Synchronize with any pending browser_activate_tab compositor delays

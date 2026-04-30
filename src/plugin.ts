@@ -460,33 +460,6 @@ const plugin: Plugin = async (ctx) => {
         },
       }),
 
-      browser_highlight: tool({
-        description: "Highlight an element on the page with a colored border for visual debugging.",
-        args: {
-          selector: schema.string(),
-          index: schema.number().optional(),
-          duration: schema.number().optional(),
-          color: schema.string().optional(),
-          showInfo: schema.boolean().optional(),
-          tabId: schema.number().optional(),
-          timeoutMs: schema.number().optional(),
-          pollMs: schema.number().optional(),
-        },
-        async execute({ selector, index, duration, color, showInfo, tabId, timeoutMs, pollMs }, ctx) {
-          const data = await toolRequest("highlight", {
-            selector,
-            index,
-            duration,
-            color,
-            showInfo,
-            tabId,
-            timeoutMs,
-            pollMs,
-          });
-          return toolResultText(data, "Highlight failed");
-        },
-      }),
-
       browser_console: tool({
         description:
           "Read console log messages from the page. Uses chrome.debugger API for complete capture. " +

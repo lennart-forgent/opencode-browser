@@ -12737,32 +12737,6 @@ var plugin = async (ctx) => {
           return toolResultText(data, "Set file input");
         }
       }),
-      browser_highlight: tool({
-        description: "Highlight an element on the page with a colored border for visual debugging.",
-        args: {
-          selector: schema.string(),
-          index: schema.number().optional(),
-          duration: schema.number().optional(),
-          color: schema.string().optional(),
-          showInfo: schema.boolean().optional(),
-          tabId: schema.number().optional(),
-          timeoutMs: schema.number().optional(),
-          pollMs: schema.number().optional()
-        },
-        async execute({ selector, index, duration: duration3, color, showInfo, tabId, timeoutMs, pollMs }, ctx2) {
-          const data = await toolRequest("highlight", {
-            selector,
-            index,
-            duration: duration3,
-            color,
-            showInfo,
-            tabId,
-            timeoutMs,
-            pollMs
-          });
-          return toolResultText(data, "Highlight failed");
-        }
-      }),
       browser_console: tool({
         description: "Read console log messages from the page. Uses chrome.debugger API for complete capture. " + "The debugger attaches lazily on first call and may show a banner in the browser.",
         args: {

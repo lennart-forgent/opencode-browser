@@ -10,7 +10,7 @@ Depending on granted permissions and the sites you allow, the extension can acce
 
 - Website content (DOM text, element attributes, links, forms)
 - User activity related to requested automation steps (clicks, typing, selection)
-- Screenshots and page snapshots requested by the user
+- Screenshots requested by the user
 - Download metadata for files initiated by automation
 - Optional diagnostics data (console messages and page errors) when debugger permission is granted
 

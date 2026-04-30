@@ -606,7 +606,7 @@ ${color("bright", "Options:")}
 ${color("bright", "Quick Start:")}
   1. Run: npx @different-ai/opencode-browser install
   2. Restart OpenCode
-  3. Use: browser_navigate / browser_click / browser_snapshot
+  3. Use: browser_navigate / browser_click / browser_screenshot
 `);
   }
 

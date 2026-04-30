@@ -597,7 +597,9 @@ async function toolActivateTab({ tabId, waitMs = 300 }) {
   const isDone = new Promise((r) => { markDone = r });
   
   // 2. Chain it globally immediately, BEFORE yielding the event loop
-  activeWaitPromise = Promise.all([activeWaitPromise, isDone]).catch(() => {});
+  const prevWait = activeWaitPromise;
+  activeWaitPromise = prevWait.then(() => isDone).catch(() => {});
+  await prevWait;
 
   try {
     const tab = await getTabById(tabId)

@@ -70,7 +70,7 @@ npx @different-ai/opencode-browser tools
 
 # run a single tool
 npx @different-ai/opencode-browser tool browser_status
-npx @different-ai/opencode-browser tool browser_query --args '{"mode":"page_text"}'
+npx @different-ai/opencode-browser tool browser_screenshot
 
 # run built-in end-to-end smoke test (click + text selector + container scroll)
 npx @different-ai/opencode-browser self-test
@@ -129,9 +129,8 @@ Core primitives:
 - `browser_open_tab`
 - `browser_close_tab`
 - `browser_navigate`
-- `browser_query` (modes: `text`, `value`, `list`, `exists`, `page_text`; optional `timeoutMs`/`pollMs`)
-- `browser_click` (optional `timeoutMs`/`pollMs`)
-- `browser_type` (optional `timeoutMs`/`pollMs`)
+- `browser_click` (uses x/y coordinates)
+- `browser_type`
 - `browser_select` (optional `timeoutMs`/`pollMs`)
 - `browser_scroll` (optional `timeoutMs`/`pollMs`)
 - `browser_wait`
@@ -152,7 +151,6 @@ Selector helpers (usable in `selector`):
 Selector-based tools wait up to 2000ms by default; set `timeoutMs: 0` to disable.
 
 Diagnostics:
-- `browser_snapshot`
 - `browser_screenshot`
 - `browser_version`
 

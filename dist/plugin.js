@@ -12704,16 +12704,6 @@ var plugin = async (ctx) => {
           return toolResultText(data, "Screenshot failed");
         }
       }),
-      browser_snapshot: tool({
-        description: "Get an accessibility tree snapshot of the page.",
-        args: {
-          tabId: schema.number().optional()
-        },
-        async execute({ tabId }, ctx2) {
-          const data = await toolRequest("snapshot", { tabId });
-          return toolResultText(data, "Snapshot failed");
-        }
-      }),
       browser_scroll: tool({
         description: "Scroll the page or scroll an element into view",
         args: {
@@ -12738,38 +12728,6 @@ var plugin = async (ctx) => {
         async execute({ ms, tabId }, ctx2) {
           const data = await toolRequest("wait", { ms, tabId });
           return toolResultText(data, "Waited");
-        }
-      }),
-      browser_query: tool({
-        description: "Read data from the page using selectors, optional wait, or page_text extraction (shadow DOM + same-origin iframes).",
-        args: {
-          selector: schema.string().optional(),
-          mode: schema.string().optional(),
-          attribute: schema.string().optional(),
-          property: schema.string().optional(),
-          index: schema.number().optional(),
-          limit: schema.number().optional(),
-          timeoutMs: schema.number().optional(),
-          pollMs: schema.number().optional(),
-          pattern: schema.string().optional(),
-          flags: schema.string().optional(),
-          tabId: schema.number().optional()
-        },
-        async execute({ selector, mode, attribute, property, index, limit, timeoutMs, pollMs, pattern, flags, tabId }, ctx2) {
-          const data = await toolRequest("query", {
-            selector,
-            mode,
-            attribute,
-            property,
-            index,
-            limit,
-            timeoutMs,
-            pollMs,
-            pattern,
-            flags,
-            tabId
-          });
-          return toolResultText(data, "Query failed");
         }
       }),
       browser_download: tool({

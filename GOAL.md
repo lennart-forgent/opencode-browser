@@ -4,9 +4,8 @@ Make browser automation predictable without relying on unsafe JavaScript eval, s
 
 ## What I changed
 
-- Added resilient DOM access primitives to the extension: deep query across shadow DOM + same‑origin iframes, indexed click/type, and a unified `browser_query` that supports waiting and `page_text` extraction.
-- Expanded `browser_snapshot` to include visible text and richer node metadata so on‑screen strings are observable without eval.
-- Removed `browser_execute` from the public tool surface to avoid CSP/unsafe‑eval failures.
+- Added resilient DOM access primitives to the extension: deep query across shadow DOM + same‑origin iframes, indexed click/type, and `browser_screenshot` extraction to reliably parse what is actually on the screen.
+- Removed `browser_execute`, `browser_query`, and `browser_snapshot` from the public tool surface to avoid CSP/unsafe‑eval failures and enforce visual validation.
 - Updated the plugin surface and README tool list to expose the minimal primitives.
 
 ## Why
@@ -16,7 +15,7 @@ Make browser automation predictable without relying on unsafe JavaScript eval, s
 
 ## Remaining tasks (if any)
 
-- Validate the new primitives on the real Admin Console flow to confirm the verification token is visible via `browser_query` with `mode=page_text`.
+- Validate the new primitives on the real Admin Console flow to confirm the verification token is visible via `browser_screenshot`.
 - Consider adding higher‑level “copy button” helpers only if real‑world flows still fail.
 
 ## Notes

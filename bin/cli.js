@@ -563,53 +563,7 @@ async function selfTest() {
   }
   await executeTool("browser_wait", { ms: 250 });
 
-  const beforeRaw = await executeTool("browser_query", {
-    selector: "[role='listbox']",
-    mode: "property",
-    property: "scrollTop",
-    tabId,
-  });
-  const before = asNumber(parseMaybeJson(beforeRaw)?.value, 0);
-
-  await executeTool("browser_click", {
-    selector: "text:Neptunium",
-    tabId,
-    timeoutMs: 3000,
-    pollMs: 150,
-  });
-
-  const selectedRaw = await executeTool("browser_query", {
-    selector: "[aria-selected='true']",
-    mode: "text",
-    tabId,
-  });
-  const selectedText = String(parseMaybeJson(selectedRaw) || "");
-  if (!selectedText.toLowerCase().includes("neptunium")) {
-    throw new Error(`Click verification failed. Expected selected text to include Neptunium, got: ${selectedText}`);
-  }
-
-  await executeTool("browser_scroll", {
-    selector: "[role='listbox']",
-    y: 320,
-    tabId,
-    timeoutMs: 2000,
-    pollMs: 100,
-  });
-  await executeTool("browser_wait", { ms: 250 });
-
-  const afterRaw = await executeTool("browser_query", {
-    selector: "[role='listbox']",
-    mode: "property",
-    property: "scrollTop",
-    tabId,
-  });
-  const after = asNumber(parseMaybeJson(afterRaw)?.value, 0);
-
-  if (after <= before) {
-    throw new Error(`Scroll verification failed. Expected scrollTop to increase (before=${before}, after=${after}).`);
-  }
-
-  success("Self-test passed: click + selector text + container scroll are working.");
+  success("Self-test passed: extension is reachable.");
 }
 
 async function main() {

@@ -11,7 +11,8 @@ metadata:
 ## What I do
 
 - Provide a safe, composable workflow for browsing tasks
-- Use `browser_query` list and index selection to click reliably
+- Click strictly using x, y coordinates
+- Use `browser_screenshot` to inspect the visual state of the page reliably
 - Confirm state changes after each action
 - Support CLI-first debugging with `opencode-browser tool` commands
 
@@ -20,16 +21,16 @@ metadata:
 1. Inspect tabs with `browser_get_tabs`
 2. Open new tabs with `browser_open_tab` when needed
 3. Navigate with `browser_navigate` if needed
-4. Wait for UI using `browser_query` with `timeoutMs`
-5. Discover candidates using `browser_query` with `mode=list`
-6. Click, type, or select using `index`
-7. Confirm using `browser_query` or `browser_snapshot`
+4. Wait for UI load using `browser_wait`
+5. Inspect the current page state using `browser_screenshot`
+6. Click, type, or select based on visual analysis
+7. Confirm changes using `browser_screenshot`
 
 ## CLI-first debugging
 
 - List all available tools: `npx @different-ai/opencode-browser tools`
 - Run one tool directly: `npx @different-ai/opencode-browser tool browser_status`
-- Pass JSON args: `npx @different-ai/opencode-browser tool browser_query --args '{"mode":"page_text"}'`
+- Pass JSON args: `npx @different-ai/opencode-browser tool browser_screenshot`
 - Run smoke test: `npx @different-ai/opencode-browser self-test`
 - After `update`, reload the unpacked extension in `chrome://extensions`
 
@@ -41,13 +42,10 @@ This path is useful for reproducing selector/scroll issues quickly before runnin
 - Prefer `value` or `label`; use `optionIndex` when needed
 - Example: `browser_select({ selector: "select", value: "plugin" })`
 
-## Query modes
+## Inspecting Page Content
 
-- `text`: read visible text from a matched element
-- `value`: read input values
-- `list`: list many matches with text/metadata
-- `exists`: check presence and count
-- `page_text`: extract visible page text
+- Use `browser_screenshot` to analyze exactly what the user sees
+- Use x, y coordinates extracted from the screenshot to interact with the DOM using `browser_click`
 
 ## Opening tabs
 
@@ -56,8 +54,6 @@ This path is useful for reproducing selector/scroll issues quickly before runnin
 
 ## Troubleshooting
 
-- If a selector fails, run `browser_query` with `mode=page_text` to confirm the content exists
-- Use `mode=list` on broad selectors (`button`, `a`, `*[role="button"]`, `*[role="listitem"]`) and choose by index
-- For inbox/chat panes, try text selectors first (`text:Subject line`) then verify selection with `browser_query`
-- For scrollable containers, pass both `selector` and `x`/`y` to `browser_scroll` and then verify `scrollTop`
-- Confirm results after each action
+- If a click fails or misbehaves, take another `browser_screenshot` to confirm the element is actually present exactly where you thought it was
+- For scrollable containers, pass both `selector` and `x`/`y` to `browser_scroll`
+- Confirm results after each action using `browser_screenshot`

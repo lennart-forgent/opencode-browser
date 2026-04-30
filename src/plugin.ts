@@ -396,9 +396,11 @@ const plugin: Plugin = async (ctx) => {
         description: "Activate a browser tab and bring its window to the front",
         args: {
           tabId: schema.number(),
+          waitMs: schema.number().optional().describe("Milliseconds to wait after activation. Defaults to 300ms."),
         },
-        async execute({ tabId }, ctx) {
+        async execute({ tabId, waitMs = 300 }, ctx) {
           const data = await toolRequest("activate_tab", { tabId });
+          await new Promise((resolve) => setTimeout(resolve, waitMs));
           return toolResultText(data, `Activated tab ${tabId}`);
         },
       }),

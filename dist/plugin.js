@@ -12677,10 +12677,12 @@ var plugin = async (ctx) => {
       browser_activate_tab: tool({
         description: "Activate a browser tab and bring its window to the front",
         args: {
-          tabId: schema.number()
+          tabId: schema.number(),
+          waitMs: schema.number().optional().describe("Milliseconds to wait after activation. Defaults to 300ms.")
         },
-        async execute({ tabId }, ctx2) {
+        async execute({ tabId, waitMs = 300 }, ctx2) {
           const data = await toolRequest("activate_tab", { tabId });
+          await new Promise((resolve2) => setTimeout(resolve2, waitMs));
           return toolResultText(data, `Activated tab ${tabId}`);
         }
       }),

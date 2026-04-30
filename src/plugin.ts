@@ -246,6 +246,80 @@ async function statusRequest(): Promise<any> {
   return await brokerRequest("status", {});
 }
 
+
+async function captureScreenshot(tabId: number | undefined, ctx: any): Promise<string> {
+  try {
+    // Verify browser extension is connected
+    const status = await statusRequest();
+    if (!status?.hostConnected) {
+      throw new Error("Chrome extension is not connected (native host offline)");
+    }
+
+    if (tabId !== undefined) {
+      // Automatically activate the tab and wait the default 300ms compositor delay
+      await toolRequest("activate_tab", { tabId });
+    }
+
+    // Synchronize with any pending browser_activate_tab compositor delays
+    await toolRequest("sync", {});
+
+    return await new Promise<string>((resolve, reject) => {
+      x11.createClient((err: any, display: any) => {
+        if (err) return reject(err);
+        try {
+          const X = display.client;
+          const root = display.screen[0].root;
+          const width = display.screen[0].pixel_width;
+          const height = display.screen[0].pixel_height;
+          
+          X.GetImage(2, root, 0, 0, width, height, 0xffffffff, (err: any, image: any) => {
+            if (err) return reject(err);
+            try {
+              const png = new PNG({ width, height });
+              for (let i = 0; i < image.data.length; i += 4) {
+                png.data[i] = image.data[i + 2];     // R
+                png.data[i + 1] = image.data[i + 1]; // G
+                png.data[i + 2] = image.data[i];     // B
+                png.data[i + 3] = 255;               // A
+              }
+              
+              const chunks: Buffer[] = [];
+              png.on('data', (chunk) => chunks.push(chunk));
+              png.on('end', () => {
+                try {
+                  const buf = Buffer.concat(chunks);
+                  const screenshotDir = join(ctx?.directory || process.cwd(), ".opencode");
+                  if (!existsSync(screenshotDir)) {
+                    mkdirSync(screenshotDir, { recursive: true });
+                  }
+                  const filepath = join(screenshotDir, `screenshot-${Date.now()}.png`);
+                  writeFileSync(filepath, buf);
+                  resolve(`Screenshot saved to ${filepath}. Use the Read tool to view this file.`);
+                } finally {
+                  X.close();
+                }
+              });
+              png.on('error', (e) => {
+                X.close();
+                reject(e);
+              });
+              png.pack();
+            } catch (e) {
+              X.close();
+              reject(e);
+            }
+          });
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+  } catch (err: any) {
+    return `Screenshot failed: ${err.message}`;
+  }
+}
+
+
 const plugin: Plugin = async (ctx) => {
 
   return {
@@ -410,75 +484,17 @@ const plugin: Plugin = async (ctx) => {
           tabId: schema.number().optional(),
         },
         async execute({ tabId }, ctx) {
-          try {
-            // Verify browser extension is connected
-            const status = await statusRequest();
-            if (!status?.hostConnected) {
-              throw new Error("Chrome extension is not connected (native host offline)");
-            }
+          return await captureScreenshot(tabId, ctx);
+        },
+      }),
 
-            if (tabId !== undefined) {
-              // Automatically activate the tab and wait the default 300ms compositor delay
-              await toolRequest("activate_tab", { tabId });
-            }
-
-            // Synchronize with any pending browser_activate_tab compositor delays
-            await toolRequest("sync", {});
-
-            return await new Promise<string>((resolve, reject) => {
-              x11.createClient((err: any, display: any) => {
-                if (err) return reject(err);
-                try {
-                  const X = display.client;
-                  const root = display.screen[0].root;
-                  const width = display.screen[0].pixel_width;
-                  const height = display.screen[0].pixel_height;
-                  
-                  X.GetImage(2, root, 0, 0, width, height, 0xffffffff, (err: any, image: any) => {
-                    if (err) return reject(err);
-                    try {
-                      const png = new PNG({ width, height });
-                      for (let i = 0; i < image.data.length; i += 4) {
-                        png.data[i] = image.data[i + 2];     // R
-                        png.data[i + 1] = image.data[i + 1]; // G
-                        png.data[i + 2] = image.data[i];     // B
-                        png.data[i + 3] = 255;               // A
-                      }
-                      
-                      const chunks: Buffer[] = [];
-                      png.on('data', (chunk) => chunks.push(chunk));
-                      png.on('end', () => {
-                        try {
-                          const buf = Buffer.concat(chunks);
-                          const screenshotDir = join(ctx?.directory || process.cwd(), ".opencode");
-                          if (!existsSync(screenshotDir)) {
-                            mkdirSync(screenshotDir, { recursive: true });
-                          }
-                          const filepath = join(screenshotDir, `screenshot-${Date.now()}.png`);
-                          writeFileSync(filepath, buf);
-                          resolve(`Screenshot saved to ${filepath}. Use the Read tool to view this file.`);
-                        } finally {
-                          X.close();
-                        }
-                      });
-                      png.on('error', (e) => {
-                        X.close();
-                        reject(e);
-                      });
-                      png.pack();
-                    } catch (e) {
-                      X.close();
-                      reject(e);
-                    }
-                  });
-                } catch (e) {
-                  reject(e);
-                }
-              });
-            });
-          } catch (err: any) {
-            return `Screenshot failed: ${err.message}`;
-          }
+      browser_view: tool({
+        description: "View a page in the browser. The content is saved to a local file so it can be viewed with the read tool.",
+        args: {
+          tabId: schema.number().optional(),
+        },
+        async execute({ tabId }, ctx) {
+          return await captureScreenshot(tabId, ctx);
         },
       }),
 

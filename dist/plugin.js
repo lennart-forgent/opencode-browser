@@ -12540,6 +12540,71 @@ async function toolRequest(toolName, args) {
 async function statusRequest() {
   return await brokerRequest("status", {});
 }
+async function captureScreenshot(tabId, ctx) {
+  try {
+    const status = await statusRequest();
+    if (!status?.hostConnected) {
+      throw new Error("Chrome extension is not connected (native host offline)");
+    }
+    if (tabId !== undefined) {
+      await toolRequest("activate_tab", { tabId });
+    }
+    await toolRequest("sync", {});
+    return await new Promise((resolve2, reject) => {
+      x11.createClient((err, display) => {
+        if (err)
+          return reject(err);
+        try {
+          const X = display.client;
+          const root = display.screen[0].root;
+          const width = display.screen[0].pixel_width;
+          const height = display.screen[0].pixel_height;
+          X.GetImage(2, root, 0, 0, width, height, 4294967295, (err2, image) => {
+            if (err2)
+              return reject(err2);
+            try {
+              const png = new PNG({ width, height });
+              for (let i = 0;i < image.data.length; i += 4) {
+                png.data[i] = image.data[i + 2];
+                png.data[i + 1] = image.data[i + 1];
+                png.data[i + 2] = image.data[i];
+                png.data[i + 3] = 255;
+              }
+              const chunks = [];
+              png.on("data", (chunk) => chunks.push(chunk));
+              png.on("end", () => {
+                try {
+                  const buf = Buffer.concat(chunks);
+                  const screenshotDir = join(ctx?.directory || process.cwd(), ".opencode");
+                  if (!existsSync(screenshotDir)) {
+                    mkdirSync(screenshotDir, { recursive: true });
+                  }
+                  const filepath = join(screenshotDir, `screenshot-${Date.now()}.png`);
+                  writeFileSync(filepath, buf);
+                  resolve2(`Screenshot saved to ${filepath}. Use the Read tool to view this file.`);
+                } finally {
+                  X.close();
+                }
+              });
+              png.on("error", (e) => {
+                X.close();
+                reject(e);
+              });
+              png.pack();
+            } catch (e) {
+              X.close();
+              reject(e);
+            }
+          });
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+  } catch (err) {
+    return `Screenshot failed: ${err.message}`;
+  }
+}
 var plugin = async (ctx) => {
   return {
     tool: {
@@ -12691,69 +12756,16 @@ var plugin = async (ctx) => {
           tabId: schema.number().optional()
         },
         async execute({ tabId }, ctx2) {
-          try {
-            const status = await statusRequest();
-            if (!status?.hostConnected) {
-              throw new Error("Chrome extension is not connected (native host offline)");
-            }
-            if (tabId !== undefined) {
-              await toolRequest("activate_tab", { tabId });
-            }
-            await toolRequest("sync", {});
-            return await new Promise((resolve2, reject) => {
-              x11.createClient((err, display) => {
-                if (err)
-                  return reject(err);
-                try {
-                  const X = display.client;
-                  const root = display.screen[0].root;
-                  const width = display.screen[0].pixel_width;
-                  const height = display.screen[0].pixel_height;
-                  X.GetImage(2, root, 0, 0, width, height, 4294967295, (err2, image) => {
-                    if (err2)
-                      return reject(err2);
-                    try {
-                      const png = new PNG({ width, height });
-                      for (let i = 0;i < image.data.length; i += 4) {
-                        png.data[i] = image.data[i + 2];
-                        png.data[i + 1] = image.data[i + 1];
-                        png.data[i + 2] = image.data[i];
-                        png.data[i + 3] = 255;
-                      }
-                      const chunks = [];
-                      png.on("data", (chunk) => chunks.push(chunk));
-                      png.on("end", () => {
-                        try {
-                          const buf = Buffer.concat(chunks);
-                          const screenshotDir = join(ctx2?.directory || process.cwd(), ".opencode");
-                          if (!existsSync(screenshotDir)) {
-                            mkdirSync(screenshotDir, { recursive: true });
-                          }
-                          const filepath = join(screenshotDir, `screenshot-${Date.now()}.png`);
-                          writeFileSync(filepath, buf);
-                          resolve2(`Screenshot saved to ${filepath}. Use the Read tool to view this file.`);
-                        } finally {
-                          X.close();
-                        }
-                      });
-                      png.on("error", (e) => {
-                        X.close();
-                        reject(e);
-                      });
-                      png.pack();
-                    } catch (e) {
-                      X.close();
-                      reject(e);
-                    }
-                  });
-                } catch (e) {
-                  reject(e);
-                }
-              });
-            });
-          } catch (err) {
-            return `Screenshot failed: ${err.message}`;
-          }
+          return await captureScreenshot(tabId, ctx2);
+        }
+      }),
+      browser_view: tool({
+        description: "View a page in the browser. The content is saved to a local file so it can be viewed with the read tool.",
+        args: {
+          tabId: schema.number().optional()
+        },
+        async execute({ tabId }, ctx2) {
+          return await captureScreenshot(tabId, ctx2);
         }
       }),
       browser_scroll: tool({

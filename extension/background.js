@@ -847,14 +847,15 @@ async function pageOps(command, args) {
     const rawFiles = Array.isArray(options.files) ? options.files : options.files ? [options.files] : []
     if (!rawFiles.length) return { ok: false, error: "files is required" }
 
-    const match = await resolveMatches(selectors, index, timeoutMs, pollMs)
-    if (!match.chosen) {
-      return { ok: false, error: `Element not found for selectors: ${selectors.join(", ")}` }
+    const { x, y } = options
+    const el = document.elementFromPoint(x, y)
+    if (!el) {
+      return { ok: false, error: `No element found at coordinates (${x}, ${y})` }
     }
 
-    const tag = match.chosen.tagName
-    if (tag !== "INPUT" || match.chosen.type !== "file") {
-      return { ok: false, error: `Element is not a file input: ${match.selectorUsed} (${tag.toLowerCase()})` }
+    const tag = el.tagName
+    if (tag !== "INPUT" || el.type !== "file") {
+      return { ok: false, error: `Element at (${x}, ${y}) is not a file input: ${tag.toLowerCase()}` }
     }
 
     function decodeBase64(value) {
@@ -881,27 +882,23 @@ async function pageOps(command, args) {
     }
 
     try {
-      match.chosen.scrollIntoView({ block: "center", inline: "center" })
+      el.focus()
     } catch {}
 
     try {
-      match.chosen.focus()
-    } catch {}
-
-    try {
-      match.chosen.files = dt.files
+      el.files = dt.files
     } catch {
       try {
-        Object.defineProperty(match.chosen, "files", { value: dt.files, writable: false })
+        Object.defineProperty(el, "files", { value: dt.files, writable: false })
       } catch {
         return { ok: false, error: "Failed to set file input" }
       }
     }
 
-    match.chosen.dispatchEvent(new Event("input", { bubbles: true }))
-    match.chosen.dispatchEvent(new Event("change", { bubbles: true }))
+    el.dispatchEvent(new Event("input", { bubbles: true }))
+    el.dispatchEvent(new Event("change", { bubbles: true }))
 
-    return { ok: true, selectorUsed: match.selectorUsed, count: dt.files.length, names }
+    return { ok: true, count: dt.files.length, names }
   }
 
   if (command === "scroll") {
@@ -1114,14 +1111,13 @@ async function toolListDownloads({ limit = 20, state } = {}) {
   return { content: JSON.stringify({ downloads: out }, null, 2) }
 }
 
-async function toolSetFileInput({ selector, tabId, index = 0, timeoutMs, pollMs, files }) {
-  if (!selector) throw new Error("Selector is required")
+async function toolSetFileInput({ x, y, tabId, files }) {
+  if (typeof x !== "number" || typeof y !== "number") throw new Error("x and y coordinates are required")
   const tab = await getTabById(tabId)
 
-  const result = await runInPage(tab.id, "set_file_input", { selector, index, timeoutMs, pollMs, files })
+  const result = await runInPage(tab.id, "set_file_input", { x, y, files })
   if (!result?.ok) throw new Error(result?.error || "Failed to set file input")
-  const used = result.selectorUsed || selector
-  return { tabId: tab.id, content: JSON.stringify({ selector: used, ...result }, null, 2) }
+  return { tabId: tab.id, content: `Set file input at (${x}, ${y})` }
 }
 
 async function toolHighlight({ selector, tabId, index = 0, duration, color, showInfo, timeoutMs, pollMs }) {

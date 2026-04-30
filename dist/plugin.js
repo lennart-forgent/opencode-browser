@@ -12741,23 +12741,19 @@ var plugin = async (ctx) => {
       browser_set_file_input: tool({
         description: "Set a file input element's selected file using a local file path.",
         args: {
-          selector: schema.string(),
+          x: schema.number(),
+          y: schema.number(),
           filePath: schema.string(),
           fileName: schema.string().optional(),
           mimeType: schema.string().optional(),
-          index: schema.number().optional(),
-          tabId: schema.number().optional(),
-          timeoutMs: schema.number().optional(),
-          pollMs: schema.number().optional()
+          tabId: schema.number().optional()
         },
-        async execute({ selector, filePath, fileName, mimeType, index, tabId, timeoutMs, pollMs }, ctx2) {
+        async execute({ x, y, filePath, fileName, mimeType, tabId }, ctx2) {
           const file2 = buildFileUploadPayload(filePath, fileName, mimeType);
           const data = await toolRequest("set_file_input", {
-            selector,
+            x,
+            y,
             tabId,
-            index,
-            timeoutMs,
-            pollMs,
             files: [file2]
           });
           return toolResultText(data, "Set file input");

@@ -12674,18 +12674,25 @@ var plugin = async (ctx) => {
           return toolResultText(data, `Typed "${text}"`);
         }
       }),
-      browser_screenshot: tool({
-        description: "Takes a screenshot of the current page. Saves to a local file so it can be viewed with the read tool.",
+      browser_activate_tab: tool({
+        description: "Activate a browser tab and bring its window to the front",
         args: {
-          tabId: schema.number().optional()
+          tabId: schema.number()
         },
         async execute({ tabId }, ctx2) {
+          const data = await toolRequest("activate_tab", { tabId });
+          return toolResultText(data, `Activated tab ${tabId}`);
+        }
+      }),
+      browser_screenshot: tool({
+        description: "Takes a screenshot of the current page. Saves to a local file so it can be viewed with the read tool.",
+        args: {},
+        async execute(args, ctx2) {
           try {
             const status = await statusRequest();
             if (!status?.hostConnected) {
               throw new Error("Chrome extension is not connected (native host offline)");
             }
-            await toolRequest("activate_tab", { tabId });
             return await new Promise((resolve2, reject) => {
               x11.createClient((err, display) => {
                 if (err)

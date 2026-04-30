@@ -12675,7 +12675,7 @@ var plugin = async (ctx) => {
         }
       }),
       browser_screenshot: tool({
-        description: "Take a screenshot of the current page. Saves to a local file and returns the path.",
+        description: "Take a screenshot of the current page. Returns base64 image data URL.",
         args: {
           tabId: schema.number().optional()
         },

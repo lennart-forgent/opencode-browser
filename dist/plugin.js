@@ -12686,7 +12686,7 @@ var plugin = async (ctx) => {
         }
       }),
       browser_screenshot: tool({
-        description: "Takes a screenshot of the current page. Saves to a local file so it can be viewed with the read tool.",
+        description: "Takes a screenshot of the browser. Saves to a local file so it can be viewed with the read tool.",
         args: {
           tabId: schema.number().optional()
         },

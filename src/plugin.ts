@@ -399,8 +399,7 @@ const plugin: Plugin = async (ctx) => {
           waitMs: schema.number().optional().describe("Milliseconds to wait after activation. Defaults to 300ms."),
         },
         async execute({ tabId, waitMs = 300 }, ctx) {
-          const data = await toolRequest("activate_tab", { tabId });
-          await new Promise((resolve) => setTimeout(resolve, waitMs));
+          const data = await toolRequest("activate_tab", { tabId, waitMs });
           return toolResultText(data, `Activated tab ${tabId}`);
         },
       }),
@@ -415,6 +414,9 @@ const plugin: Plugin = async (ctx) => {
             if (!status?.hostConnected) {
               throw new Error("Chrome extension is not connected (native host offline)");
             }
+
+            // Synchronize with any pending browser_activate_tab compositor delays
+            await toolRequest("sync", {});
 
             return await new Promise<string>((resolve, reject) => {
               x11.createClient((err: any, display: any) => {

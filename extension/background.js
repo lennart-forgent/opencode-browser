@@ -292,6 +292,7 @@ async function handleToolRequest(request) {
 
 async function executeTool(toolName, args) {
   const tools = {
+    sync: toolSync,
     activate_tab: toolActivateTab,
     get_active_tab: toolGetActiveTab,
     get_tabs: toolGetTabs,
@@ -583,7 +584,14 @@ async function pageOps(command, args) {
   return { ok: false, error: `Unknown command: ${String(command)}` }
 }
 
-async function toolActivateTab({ tabId }) {
+let activeWaitPromise = Promise.resolve()
+
+async function toolSync() {
+  await activeWaitPromise
+  return { content: "ok" }
+}
+
+async function toolActivateTab({ tabId, waitMs = 300 }) {
   const tab = await getTabById(tabId)
   
   if (!tab.active) {
@@ -597,10 +605,10 @@ async function toolActivateTab({ tabId }) {
     await chrome.windows.update(tab.windowId, { focused: true })
   }
 
-  // Small delay to let the OS compositor draw the window if it wasn't already active
-  if (!tab.active || (focusedWin && focusedWin.focused && focusedWin.id !== tab.windowId)) {
-    await new Promise((resolve) => setTimeout(resolve, 200))
-  }
+  const delay = Number.isFinite(waitMs) ? waitMs : 300
+  const p = new Promise((resolve) => setTimeout(resolve, delay))
+  activeWaitPromise = p
+  await p
   
   return { tabId: tab.id, content: `Activated tab ${tab.id}` }
 }

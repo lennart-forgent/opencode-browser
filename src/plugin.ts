@@ -399,6 +399,12 @@ const plugin: Plugin = async (ctx) => {
         },
         async execute({ tabId }, ctx) {
           try {
+            // Verify browser extension is connected
+            const status = await statusRequest();
+            if (!status?.hostConnected) {
+              throw new Error("Chrome extension is not connected (native host offline)");
+            }
+
             return await new Promise<string>((resolve, reject) => {
               x11.createClient((err: any, display: any) => {
                 if (err) return reject(err);

@@ -299,7 +299,6 @@ async function executeTool(toolName, args) {
     navigate: toolNavigate,
     click: toolClick,
     type: toolType,
-    screenshot: toolScreenshot,
     scroll: toolScroll,
     wait: toolWait,
     list_downloads: toolListDownloads,
@@ -641,12 +640,6 @@ async function toolType({ text, tabId, clear = false }) {
   const result = await runInPage(tab.id, "type", { text, clear })
   if (!result?.ok) throw new Error(result?.error || "Type failed")
   return { tabId: tab.id, content: `Typed "${text}"` }
-}
-
-async function toolScreenshot({ tabId }) {
-  const tab = await getTabById(tabId)
-  const png = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" })
-  return { tabId: tab.id, content: png }
 }
 
 async function toolGetTabs() {

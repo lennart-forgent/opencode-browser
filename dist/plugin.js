@@ -12541,15 +12541,14 @@ async function statusRequest() {
   return await brokerRequest("status", {});
 }
 async function captureScreenshot(tabId, ctx) {
+  let lockId;
   try {
     const status = await statusRequest();
     if (!status?.hostConnected) {
       throw new Error("Chrome extension is not connected (native host offline)");
     }
-    if (tabId !== undefined) {
-      await toolRequest("activate_tab", { tabId });
-    }
-    await toolRequest("sync", {});
+    const lockResult = await toolRequest("lock", { tabId });
+    lockId = lockResult.lockId;
     return await new Promise((resolve2, reject) => {
       x11.createClient((err, display) => {
         if (err)
@@ -12603,6 +12602,10 @@ async function captureScreenshot(tabId, ctx) {
     });
   } catch (err) {
     return `Screenshot failed: ${err.message}`;
+  } finally {
+    if (lockId) {
+      await toolRequest("unlock", { lockId }).catch(() => {});
+    }
   }
 }
 var plugin = async (ctx) => {

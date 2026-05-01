@@ -248,20 +248,16 @@ async function statusRequest(): Promise<any> {
 
 
 async function captureScreenshot(tabId: number | undefined, ctx: any): Promise<string> {
+  let lockId: string | undefined;
+
   try {
-    // Verify browser extension is connected
     const status = await statusRequest();
     if (!status?.hostConnected) {
       throw new Error("Chrome extension is not connected (native host offline)");
     }
 
-    if (tabId !== undefined) {
-      // Automatically activate the tab and wait the default 300ms compositor delay
-      await toolRequest("activate_tab", { tabId });
-    }
-
-    // Synchronize with any pending browser_activate_tab compositor delays
-    await toolRequest("sync", {});
+    const lockResult = await toolRequest("lock", { tabId });
+    lockId = lockResult.lockId;
 
     return await new Promise<string>((resolve, reject) => {
       x11.createClient((err: any, display: any) => {
@@ -277,10 +273,10 @@ async function captureScreenshot(tabId: number | undefined, ctx: any): Promise<s
             try {
               const png = new PNG({ width, height });
               for (let i = 0; i < image.data.length; i += 4) {
-                png.data[i] = image.data[i + 2];     // R
-                png.data[i + 1] = image.data[i + 1]; // G
-                png.data[i + 2] = image.data[i];     // B
-                png.data[i + 3] = 255;               // A
+                png.data[i] = image.data[i + 2];
+                png.data[i + 1] = image.data[i + 1];
+                png.data[i + 2] = image.data[i];
+                png.data[i + 3] = 255;
               }
               
               const chunks: Buffer[] = [];
@@ -316,6 +312,10 @@ async function captureScreenshot(tabId: number | undefined, ctx: any): Promise<s
     });
   } catch (err: any) {
     return `Screenshot failed: ${err.message}`;
+  } finally {
+    if (lockId) {
+      await toolRequest("unlock", { lockId }).catch(() => {});
+    }
   }
 }
 

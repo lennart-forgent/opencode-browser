@@ -275,25 +275,52 @@ async function handleMessage(message) {
   }
 }
 
+let toolQueue = Promise.resolve()
+let currentRequestId = null;
+
 async function handleToolRequest(request) {
   const { id, tool, args } = request
 
-  try {
-    const result = await executeTool(tool, args || {})
-    send({ type: "tool_response", id, result })
-  } catch (error) {
-    send({
-      type: "tool_response",
-      id,
-      error: { content: error?.message || String(error) },
-    })
+  if (tool === "unlock") {
+    try {
+      const result = await executeTool(tool, args || {})
+      send({ type: "tool_response", id, result })
+    } catch (error) {
+      send({
+        type: "tool_response",
+        id,
+        error: { content: error?.message || String(error) },
+      })
+    }
+    return
   }
+
+  const execute = async () => {
+    currentRequestId = id;
+    try {
+      const result = await executeTool(tool, args || {})
+      if (result !== undefined) {
+        send({ type: "tool_response", id, result })
+      }
+    } catch (error) {
+      send({
+        type: "tool_response",
+        id,
+        error: { content: error?.message || String(error) },
+      })
+    } finally {
+      currentRequestId = null;
+    }
+  }
+
+  // Enqueue all tool executions strictly sequentially
+  toolQueue = toolQueue.then(execute).catch(execute)
 }
 
 async function executeTool(toolName, args) {
   const tools = {
-    sync: toolSync,
-    activate_tab: toolActivateTab,
+    lock: toolLock,
+    unlock: toolUnlock,
     get_active_tab: toolGetActiveTab,
     get_tabs: toolGetTabs,
     open_tab: toolOpenTab,
@@ -312,6 +339,84 @@ async function executeTool(toolName, args) {
   const fn = tools[toolName]
   if (!fn) throw new Error(`Unknown tool: ${toolName}`)
   return await fn(args)
+}
+
+// -----------------------------------------------------------------------------
+// Distributed Locking & Queueing Mechanism
+// -----------------------------------------------------------------------------
+
+let activeLockId = null
+let lockReleaseFunction = null
+let lockTimeoutHandle = null
+
+async function activateTabHelper({ tabId, waitMs = 300 }) {
+  const tab = await getTabById(tabId)
+  
+  if (!tab.active) {
+    await chrome.tabs.update(tab.id, { active: true })
+  }
+  
+  // Only bring the window to the front if Chrome is already the active OS application.
+  const focusedWin = await chrome.windows.getLastFocused()
+  if (focusedWin && focusedWin.focused && focusedWin.id !== tab.windowId) {
+    await chrome.windows.update(tab.windowId, { focused: true })
+  }
+
+  const delay = Number.isFinite(waitMs) ? waitMs : 300
+  await new Promise((resolve) => setTimeout(resolve, delay))
+}
+
+async function toolLock({ tabId, waitMs }) {
+  if (tabId !== undefined) {
+    await activateTabHelper({ tabId, waitMs })
+  }
+
+  const lockId = Math.random().toString(36).substring(2)
+  
+  const lockPromise = new Promise((resolve) => {
+    lockReleaseFunction = resolve
+  })
+
+  activeLockId = lockId
+
+  lockTimeoutHandle = setTimeout(() => {
+    console.warn(`[OpenCode] Lock ${lockId} timed out after 5000ms. Auto-releasing.`)
+    if (activeLockId === lockId) {
+      if (lockReleaseFunction) lockReleaseFunction()
+      activeLockId = null
+      lockReleaseFunction = null
+      lockTimeoutHandle = null
+    }
+  }, 5000)
+
+  // We return the lockId to Node IMMEDIATELY...
+  setTimeout(() => {
+    // We send this outside the normal return flow because returning from this
+    // function normally would resolve the queue step. We want to pause the queue.
+    send({ type: "tool_response", id: currentRequestId, result: { lockId } })
+  }, 0)
+
+  // ...but we halt the global toolQueue HERE until unlocked
+  await lockPromise
+  
+  // Return undefined so the execute wrapper doesn't send a second response
+  return undefined
+}
+
+async function toolUnlock({ lockId }) {
+  if (!lockId) throw new Error("lockId is required")
+  if (activeLockId !== lockId) {
+    return { content: `Ignored: Lock ${lockId} is not the active lock.` }
+  }
+
+  if (lockTimeoutHandle) clearTimeout(lockTimeoutHandle)
+  if (lockReleaseFunction) lockReleaseFunction()
+
+  activeLockId = null
+  lockReleaseFunction = null
+  lockTimeoutHandle = null
+
+  return { content: "Unlocked successfully" }
 }
 
 async function getActiveTab() {
@@ -582,46 +687,6 @@ async function pageOps(command, args) {
   }
 
   return { ok: false, error: `Unknown command: ${String(command)}` }
-}
-
-let activeWaitPromise = Promise.resolve()
-
-async function toolSync() {
-  await activeWaitPromise
-  return { content: "ok" }
-}
-
-async function toolActivateTab({ tabId, waitMs = 300 }) {
-  // 1. Synchronously create a lock for THIS activation
-  let markDone;
-  const isDone = new Promise((r) => { markDone = r });
-  
-  // 2. Chain it globally immediately, BEFORE yielding the event loop
-  const prevWait = activeWaitPromise;
-  activeWaitPromise = prevWait.then(() => isDone).catch(() => {});
-  await prevWait;
-
-  try {
-    const tab = await getTabById(tabId)
-    
-    if (!tab.active) {
-      await chrome.tabs.update(tab.id, { active: true })
-    }
-    
-    // Only bring the window to the front if Chrome is already the active OS application.
-    const focusedWin = await chrome.windows.getLastFocused()
-    if (focusedWin && focusedWin.focused && focusedWin.id !== tab.windowId) {
-      await chrome.windows.update(tab.windowId, { focused: true })
-    }
-
-    const delay = Number.isFinite(waitMs) ? waitMs : 300
-    await new Promise((resolve) => setTimeout(resolve, delay))
-    
-    return { tabId: tab.id, content: `Activated tab ${tab.id}` }
-  } finally {
-    // 3. Release the lock no matter what happens
-    markDone();
-  }
 }
 
 async function toolGetActiveTab() {
